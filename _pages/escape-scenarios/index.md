@@ -1,7 +1,7 @@
 ---
 layout: page
-title: "Specific Escape Scenarios"
+title: "Escape Scenarios"
 permalink: /escape-scenarios/
 ---
 
-{% include_relative "../../4 - Specific Escape Scenarios/README.md" %}
+{% include docs/escape-scenarios/readme.md %}

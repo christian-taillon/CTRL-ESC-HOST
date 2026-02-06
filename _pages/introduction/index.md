@@ -1,7 +1,7 @@
 ---
 layout: page
-title: "Introduction to Escape-to-Host Flaws"
+title: "Introduction"
 permalink: /introduction/
 ---
 
-{% include_relative "../../1 - Introduction to Escape-to-Host Flaws/README.md" %}
+{% include docs/introduction/readme.md %}

@@ -4,4 +4,4 @@ title: "Protocol-Handler-Hardening"
 permalink: /defensive-recommendations/protocol-handler-hardening/
 ---
 
-{% include_relative "../../../5 - Defensive Recommendations/Protocol-Handler-Hardening.md" %}
+{% include docs/defensive-recommendations/protocol-handler-hardening.md %}

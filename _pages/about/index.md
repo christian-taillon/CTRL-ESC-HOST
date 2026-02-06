@@ -4,4 +4,4 @@ title: "About"
 permalink: /about/
 ---
 
-{% include_relative "../../README.md" %}
+{% include docs/readme.md %}

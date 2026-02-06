@@ -4,4 +4,4 @@ title: "Initial Escape Tactics"
 permalink: /kiosk-playbook/win11-kiosk-mode-attended-access/initial-escape-tactics/
 ---
 
-{% include_relative "../../../../2 - Kiosk Playbook/1 - Win11 Kiosk Mode - Attended Access/1 - Initial Escape Tactics/README.md" %}
+{% include docs/kiosk-playbook/win11-kiosk-mode-attended-access/initial-escape-tactics/readme.md %}

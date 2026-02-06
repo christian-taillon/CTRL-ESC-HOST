@@ -39,6 +39,9 @@ footer-text-col: "#ffffff"
 footer-link-col: "#289dff"
 footer-hover-col: "#289dff"
 
+include:
+  - _pages
+
 exclude:
   - vendor
   - .bundle
@@ -48,3 +51,11 @@ exclude:
   - tools
   - Gemfile
   - Gemfile.lock
+  - "1 - Introduction to Escape-to-Host Flaws"
+  - "2 - Kiosk Playbook"
+  - "3 - Presented App Playbook"
+  - "4 - Specific Escape Scenarios"
+  - "5 - Defensive Recommendations"
+  - README.md
+  - LICENSE
+  - _docs_src

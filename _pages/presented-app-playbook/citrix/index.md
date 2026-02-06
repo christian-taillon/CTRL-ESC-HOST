@@ -4,4 +4,4 @@ title: "Citrix"
 permalink: /presented-app-playbook/citrix/
 ---
 
-{% include_relative "../../../3 - Presented App Playbook/Citrix/README.md" %}
+{% include docs/presented-app-playbook/citrix/readme.md %}

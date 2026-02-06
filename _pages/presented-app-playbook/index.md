@@ -4,4 +4,4 @@ title: "Presented App Playbook"
 permalink: /presented-app-playbook/
 ---
 
-{% include_relative "../../3 - Presented App Playbook/README.md" %}
+{% include docs/presented-app-playbook/readme.md %}

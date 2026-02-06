@@ -4,4 +4,4 @@ title: "Defensive Recommendations"
 permalink: /defensive-recommendations/
 ---
 
-{% include_relative "../../5 - Defensive Recommendations/README.md" %}
+{% include docs/defensive-recommendations/readme.md %}
