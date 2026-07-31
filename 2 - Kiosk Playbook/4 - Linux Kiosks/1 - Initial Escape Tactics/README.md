@@ -98,7 +98,7 @@ It opens `gnome-terminal`. From that terminal, restore the workshop kiosk with:
 kiosk reset
 ```
 
-The installer also adds `alias kiosk='/usr/local/bin/kiosk'` to `~/.bashrc`. New Bash terminals load it automatically. In a terminal that was already open during setup, run `source ~/.bashrc`; the global `/usr/local/bin/kiosk` command remains available even without the alias.
+The installer also adds `alias kiosk='/usr/local/bin/kiosk'` to `~/.bashrc`. New Bash terminals load it automatically. In a terminal that was already open during setup, run `source ~/.bashrc`; the global `/usr/local/bin/kiosk` command remains available even without the alias. A bash-completion file installed at `/usr/share/bash-completion/completions/kiosk` provides tab completion for the `setup`, `reset`, and `remove` actions and their options; it loads automatically in new Bash terminals on systems with bash-completion installed.
 
 The shortcut is an operational recovery path, not a security boundary. A participant who obtains a shell can inspect GNOME settings or the setup source.
 
@@ -141,7 +141,7 @@ kiosk remove
 ./prepare-kiosk.sh --level 2 --browser chrome --user kiosk --reboot
 ```
 
-`kiosk remove` accepts no options and does not reboot. It removes only the saved configuration at `/var/lib/ctrl-esc-host-kiosk/users/<uid>/config` and the managed `skyline-kiosk.desktop` autostart entry. GDM autologin and GNOME lockdown remain in place until the next setup overwrites them. Install the new browser first if it is not already present; the installer installs Firefox and Chromium through `apt-get` but requires Google Chrome to be pre-installed.
+`kiosk remove` accepts no options and does not reboot. It removes only the saved configuration at `/var/lib/ctrl-esc-host-kiosk/users/<uid>/config`, the managed `skyline-kiosk.desktop` autostart entry, and the bash-completion file at `/usr/share/bash-completion/completions/kiosk`. GDM autologin and GNOME lockdown remain in place until the next setup overwrites them. Install the new browser first if it is not already present; the installer installs Firefox and Chromium through `apt-get` but requires Google Chrome to be pre-installed.
 
 ## Installed Files
 
@@ -151,6 +151,7 @@ First-time setup installs:
 /usr/local/bin/kiosk
 /usr/local/libexec/ctrl-esc-host-kiosk/prepare-kiosk.sh
 /usr/local/share/ctrl-esc-host-kiosk/airline_kiosk.html
+/usr/share/bash-completion/completions/kiosk
 ~/Public/airline_kiosk.html
 ~/Public/start-kiosk.sh
 ~/.config/autostart/skyline-kiosk.desktop
