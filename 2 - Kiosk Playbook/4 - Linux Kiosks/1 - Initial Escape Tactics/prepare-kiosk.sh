@@ -495,16 +495,29 @@ PY
 stop_running_kiosk_firefox() {
   local attempt
   local kiosk_uid
+  local pids
 
   [[ "$BROWSER_NAME" == "firefox" ]] || return 0
   kiosk_uid="$($ID_BIN -u "$KIOSK_USER")"
-  pgrep -u "$kiosk_uid" -x firefox &>/dev/null || return 0
+  # Skip zombie/defunct processes — they can't be killed and don't hold the profile lock.
+  pids="$(pgrep -u "$kiosk_uid" -x firefox 2>/dev/null || true)"
+  [[ -n "$pids" ]] || return 0
+
+  # Check if any matching process is NOT a zombie.
+  if ! echo "$pids" | xargs ps -o pid=,stat= -p 2>/dev/null | awk '{print $2}' | grep -qv 'Z'; then
+    log "Firefox is not running (only defunct processes). Proceeding."
+    return 0
+  fi
 
   FIREFOX_WAS_RUNNING="true"
   log "Stopping the running kiosk Firefox before updating its profile..."
   pkill -TERM -u "$kiosk_uid" -x firefox 2>/dev/null || true
   for ((attempt = 0; attempt < 100; attempt++)); do
-    pgrep -u "$kiosk_uid" -x firefox &>/dev/null || return 0
+    pids="$(pgrep -u "$kiosk_uid" -x firefox 2>/dev/null || true)"
+    [[ -n "$pids" ]] || return 0
+    if ! echo "$pids" | xargs ps -o pid=,stat= -p 2>/dev/null | awk '{print $2}' | grep -qv 'Z'; then
+      return 0
+    fi
     sleep 0.1
   done
   die "The kiosk Firefox process did not stop cleanly; refusing to update $FIREFOX_PROFILE/customKeys.json."
