@@ -29,6 +29,7 @@ SUDO_BIN="/usr/bin/sudo"
 ID_BIN="/usr/bin/id"
 GETENT_BIN="/usr/bin/getent"
 SYSTEMCTL_BIN="/usr/bin/systemctl"
+PYTHON_BIN="/usr/bin/python3"
 
 PROGRAM_NAME="${0##*/}"
 SCRIPT_PATH="${BASH_SOURCE[0]}"
@@ -71,6 +72,8 @@ KIOSK_HTML_TEMP=""
 KIOSK_WRAPPER_TEMP=""
 KIOSK_DESKTOP_TEMP=""
 BROWSER_BIN=""
+FIREFOX_PROFILE=""
+FIREFOX_WAS_RUNNING="false"
 TERMINAL_BIN=""
 SOURCE_HTML=""
 GDM_VARIANT=""
@@ -128,6 +131,7 @@ print_usage() {
 Usage:
   ./prepare-kiosk.sh [options]
   kiosk reset [--reboot|--no-reboot]
+  kiosk remove
 
 First-run options:
   --level 1|2                 Lockdown level (default: 2)
@@ -144,6 +148,13 @@ Lockdown levels:
 
 The instructor recovery shortcut is Ctrl+Alt+Shift+O. It opens a terminal so
 the instructor can run: kiosk reset
+
+kiosk remove clears the saved kiosk configuration and the managed autostart
+entry so the device can be redeployed with a different browser via first-time
+setup. GDM autologin and GNOME lockdown remain until the next setup overwrites
+them; install the new browser first, then run:
+
+  ./prepare-kiosk.sh --level 2 --browser chrome --user kiosk --reboot
 
 The kiosk account must be authorized to use sudo. Keep its password available
 to instructors; do not run this script as root.
@@ -211,7 +222,7 @@ set_user_paths() {
 }
 
 parse_arguments() {
-  if [[ "${1:-}" == "setup" || "${1:-}" == "reset" ]]; then
+  if [[ "${1:-}" == "setup" || "${1:-}" == "reset" || "${1:-}" == "remove" ]]; then
     ACTION="$1"
     shift
   elif [[ "$PROGRAM_NAME" == "kiosk" && "${1:-}" == "" ]]; then
@@ -268,6 +279,14 @@ parse_arguments() {
 
   if [[ "$ACTION" == "reset" && "$SETUP_OPTION_SEEN" == "true" ]]; then
     die "kiosk reset reuses the saved browser, user, and level. Only reboot options are accepted."
+  fi
+
+  if [[ "$ACTION" == "remove" && "$SETUP_OPTION_SEEN" == "true" ]]; then
+    die "kiosk remove accepts no setup options. Re-run first-time setup to choose a new browser."
+  fi
+
+  if [[ "$ACTION" == "remove" && "$REBOOT_MODE" == "yes" ]]; then
+    die "kiosk remove does not reboot. Run first-time setup with --reboot after switching browsers."
   fi
 }
 
@@ -335,6 +354,7 @@ cleanup_autostart_stage() {
   if [[ -n "$AUTOSTART_PREVIOUS" && ( -e "$AUTOSTART_PREVIOUS" || -L "$AUTOSTART_PREVIOUS" ) && ! -e "$AUTOSTART_DIR" && ! -L "$AUTOSTART_DIR" ]]; then
     mv -- "$AUTOSTART_PREVIOUS" "$AUTOSTART_DIR"
   fi
+  restart_stopped_kiosk_firefox || true
 }
 
 preflight() {
@@ -403,6 +423,162 @@ resolve_browser() {
   log "Resolved browser executable: $BROWSER_BIN"
   TERMINAL_BIN="$(command -v gnome-terminal || true)"
   [[ -n "$TERMINAL_BIN" && -x "$TERMINAL_BIN" ]] || die "gnome-terminal is required for the instructor recovery shortcut."
+}
+
+resolve_firefox_profile() {
+  local profiles_ini
+  local profile_selector="install"
+  local version
+
+  [[ "$BROWSER_NAME" == "firefox" ]] || return 0
+  [[ -x "$PYTHON_BIN" ]] || die "$PYTHON_BIN is required to configure Firefox shortcuts."
+  command -v pgrep &>/dev/null && command -v pkill &>/dev/null || die "pgrep and pkill are required to stop Firefox safely."
+  version="$(LC_ALL=C "$BROWSER_BIN" --version 2>/dev/null)" || die "Unable to determine the Firefox version."
+  [[ "$version" =~ Firefox[^0-9]*([0-9]+) ]] || die "Unable to parse the Firefox version: $version"
+  [[ "${BASH_REMATCH[1]}" -ge 147 ]] || die "Firefox 147 or newer is required for profile shortcut overrides (found: $version)."
+
+  if [[ "$BROWSER_BIN" == /snap/* ]] || { [[ "$BROWSER_BIN" == "/usr/bin/firefox" && -r "$BROWSER_BIN" ]] && grep -Eq '/snap/bin/firefox|snap (run )?firefox' "$BROWSER_BIN"; }; then
+    profiles_ini="$KIOSK_HOME/snap/firefox/common/.mozilla/firefox/profiles.ini"
+    profile_selector="profile"
+  else
+    profiles_ini="$KIOSK_HOME/.mozilla/firefox/profiles.ini"
+  fi
+  [[ -f "$profiles_ini" ]] || die "Firefox profile metadata is missing at $profiles_ini. Launch this Firefox installation once, close it, and rerun setup."
+
+  FIREFOX_PROFILE="$($PYTHON_BIN - "$profiles_ini" "$profile_selector" <<'PY'
+import configparser
+import os
+import sys
+
+profiles_ini = os.path.abspath(sys.argv[1])
+profile_selector = sys.argv[2]
+profile_root = os.path.dirname(profiles_ini)
+config = configparser.ConfigParser(interpolation=None)
+try:
+    with open(profiles_ini, encoding="utf-8") as profiles_file:
+        config.read_file(profiles_file)
+except (OSError, configparser.Error) as error:
+    raise SystemExit(f"Unable to read {profiles_ini}: {error}")
+
+install_defaults = {
+    config[section]["Default"].strip()
+    for section in config.sections()
+    if section.startswith("Install") and config[section].get("Default")
+}
+profile_defaults = {
+    config[section]["Path"].strip()
+    for section in config.sections()
+    if section.startswith("Profile")
+    and config[section].get("Path")
+    and config[section].getboolean("Default", fallback=False)
+}
+defaults = profile_defaults if profile_selector == "profile" else install_defaults
+if len(defaults) != 1:
+    raise SystemExit(
+        f"Unable to identify one unambiguous default Firefox profile from {profiles_ini}"
+    )
+
+selected_profile = defaults.pop()
+if not os.path.isabs(selected_profile):
+    selected_profile = os.path.join(profile_root, selected_profile)
+selected_profile = os.path.abspath(selected_profile)
+if not os.path.isdir(selected_profile):
+    raise SystemExit(f"Firefox default profile does not exist: {selected_profile}")
+print(selected_profile)
+PY
+  )" || die "Unable to resolve the Firefox profile selected by $profiles_ini."
+  [[ -n "$FIREFOX_PROFILE" && "$FIREFOX_PROFILE" != *$'\n'* ]] || die "Firefox returned an invalid profile path."
+  log "Resolved Firefox kiosk profile: $FIREFOX_PROFILE"
+}
+
+stop_running_kiosk_firefox() {
+  local attempt
+  local kiosk_uid
+
+  [[ "$BROWSER_NAME" == "firefox" ]] || return 0
+  kiosk_uid="$($ID_BIN -u "$KIOSK_USER")"
+  pgrep -u "$kiosk_uid" -x firefox &>/dev/null || return 0
+
+  FIREFOX_WAS_RUNNING="true"
+  log "Stopping the running kiosk Firefox before updating its profile..."
+  pkill -TERM -u "$kiosk_uid" -x firefox 2>/dev/null || true
+  for ((attempt = 0; attempt < 100; attempt++)); do
+    pgrep -u "$kiosk_uid" -x firefox &>/dev/null || return 0
+    sleep 0.1
+  done
+  die "The kiosk Firefox process did not stop cleanly; refusing to update $FIREFOX_PROFILE/customKeys.json."
+}
+
+restart_stopped_kiosk_firefox() {
+  [[ "$FIREFOX_WAS_RUNNING" == "true" ]] || return 0
+  if [[ -x "$KIOSK_WRAPPER" ]]; then
+    log "Restarting the kiosk Firefox through $KIOSK_WRAPPER"
+    /usr/bin/nohup "$KIOSK_WRAPPER" >/dev/null 2>&1 &
+  else
+    warn "Firefox was stopped, but $KIOSK_WRAPPER is unavailable for restart."
+  fi
+  FIREFOX_WAS_RUNNING="false"
+}
+
+configure_firefox_shortcuts() {
+  local custom_keys
+  local kiosk_uid
+
+  [[ "$BROWSER_NAME" == "firefox" ]] || return 0
+  [[ -n "$FIREFOX_PROFILE" && -d "$FIREFOX_PROFILE" ]] || die "The Firefox kiosk profile is unavailable."
+  kiosk_uid="$($ID_BIN -u "$KIOSK_USER")"
+  custom_keys="$FIREFOX_PROFILE/customKeys.json"
+
+  "$PYTHON_BIN" - "$FIREFOX_PROFILE" "$kiosk_uid" <<'PY'
+import json
+import os
+import sys
+import tempfile
+
+profile = os.path.abspath(sys.argv[1])
+expected_uid = int(sys.argv[2])
+custom_keys = os.path.join(profile, "customKeys.json")
+
+if os.getuid() != expected_uid:
+    raise SystemExit("customKeys.json must be configured by the kiosk user")
+
+try:
+    with open(custom_keys, encoding="utf-8") as source:
+        shortcuts = json.load(source)
+except FileNotFoundError:
+    shortcuts = {}
+
+if not isinstance(shortcuts, dict):
+    raise SystemExit(f"{custom_keys} must contain a JSON object")
+
+shortcuts.update(
+    {
+        "key_close": {},
+        "key_closeWindow": {},
+        "key_quitApplication": {},
+    }
+)
+
+temporary_fd, temporary_path = tempfile.mkstemp(prefix=".customKeys.", dir=profile)
+try:
+    os.fchmod(temporary_fd, 0o600)
+    with os.fdopen(temporary_fd, "w", encoding="utf-8") as destination:
+        json.dump(shortcuts, destination, ensure_ascii=True, indent=2)
+        destination.write("\n")
+        destination.flush()
+        os.fsync(destination.fileno())
+    os.replace(temporary_path, custom_keys)
+finally:
+    if os.path.exists(temporary_path):
+        os.unlink(temporary_path)
+
+installed = os.stat(custom_keys)
+if installed.st_uid != expected_uid or installed.st_mode & 0o7777 != 0o600:
+    raise SystemExit(f"Incorrect owner or mode on {custom_keys}")
+PY
+
+  "$PYTHON_BIN" -m json.tool "$custom_keys" >/dev/null || die "Firefox shortcut JSON validation failed: $custom_keys"
+  log "Disabled Firefox close and quit shortcuts in $custom_keys"
 }
 
 install_kiosk_command() {
@@ -555,7 +731,8 @@ generate_kiosk_files() {
 
   case "$BROWSER_NAME" in
   firefox)
-    browser_args=("$BROWSER_BIN" --kiosk "$KIOSK_HTML")
+    [[ -n "$FIREFOX_PROFILE" ]] || die "The Firefox kiosk profile was not resolved."
+    browser_args=("$BROWSER_BIN" --profile "$FIREFOX_PROFILE" --kiosk "$KIOSK_HTML")
     ;;
   chromium | chrome)
     browser_args=(
@@ -1097,9 +1274,15 @@ maybe_reboot() {
   case "$answer" in
   y | Y | yes | YES)
     log "Rebooting into the kiosk..."
-    run_root systemctl reboot
+    if run_root systemctl reboot; then
+      FIREFOX_WAS_RUNNING="false"
+    else
+      restart_stopped_kiosk_firefox
+      die "Unable to reboot into the kiosk."
+    fi
     ;;
   *)
+    restart_stopped_kiosk_firefox
     log "Reboot skipped. Reboot later to verify GDM autologin and kiosk autostart."
     ;;
   esac
@@ -1115,9 +1298,12 @@ run_setup() {
   capture_custom_bindings_once
   install_dependencies
   resolve_browser
+  resolve_firefox_profile
   install_kiosk_command
   configure_bash_alias
   prepare_autostart_stage
+  stop_running_kiosk_firefox
+  configure_firefox_shortcuts
   generate_kiosk_files "$AUTOSTART_STAGE"
   configure_mail_handler
   configure_gdm_autologin
@@ -1142,9 +1328,12 @@ run_reset() {
   locate_source_html
   install_dependencies
   resolve_browser
+  resolve_firefox_profile
   install_kiosk_command
   configure_bash_alias
   prepare_autostart_stage
+  stop_running_kiosk_firefox
+  configure_firefox_shortcuts
   generate_kiosk_files "$AUTOSTART_STAGE"
   configure_mail_handler
   configure_gdm_autologin
@@ -1158,6 +1347,30 @@ run_reset() {
   maybe_reboot
 }
 
+run_remove() {
+  set_user_paths
+  preflight
+
+  if ! run_root test -f "$CONFIG_FILE"; then
+    log "No completed kiosk setup was found. Nothing to remove."
+    return 0
+  fi
+
+  if [[ -f "$AUTOSTART_DIR/$DESKTOP_FILE_NAME" ]]; then
+    rm -f -- "$AUTOSTART_DIR/$DESKTOP_FILE_NAME"
+    log "Removed the managed kiosk autostart entry: $AUTOSTART_DIR/$DESKTOP_FILE_NAME"
+  fi
+
+  run_root rm -f -- "$CONFIG_FILE"
+  log "Cleared the saved kiosk configuration: $CONFIG_FILE"
+
+  log ""
+  log "Kiosk removal completed successfully."
+  log "Install the new browser first, then redeploy with first-time setup:"
+  log "  ./prepare-kiosk.sh --level 2 --browser chrome --user kiosk --reboot"
+  log "GDM autologin and GNOME lockdown remain until the next setup overwrites them."
+}
+
 main() {
   parse_arguments "$@"
   [[ "$EUID" -ne 0 ]] || die "Do not run this script with sudo. Run it as the logged-in kiosk user."
@@ -1168,6 +1381,7 @@ main() {
   case "$ACTION" in
   setup) run_setup ;;
   reset) run_reset ;;
+  remove) run_remove ;;
   *) die "Unsupported action: $ACTION" ;;
   esac
 }

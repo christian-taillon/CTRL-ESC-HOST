@@ -2,7 +2,7 @@ This directory contains the Linux kiosk setup and the initial escape workshop re
 
 ## Resources
 
-- `prepare-kiosk.sh`: One-time GNOME kiosk installer and workshop reset utility.
+- `prepare-kiosk.sh`: GNOME kiosk installer, workshop reset utility, and browser-switch helper.
 - `airline_kiosk.html`: SkyLine Premium full-screen kiosk demo.
 - `INSTRUCTOR-CHEATSHEET.md`: Deployment, validation, recovery, and between-student reset commands.
 - `Protocol-Handler-Escape/`: Protocol-handler breakout walkthrough.
@@ -24,6 +24,8 @@ Confirm authorization before setup:
 sudo -v
 ```
 
+Firefox deployments require Firefox 147 or newer. Launch the selected system Firefox once and close it before setup so Firefox creates its default profile metadata; the installer will not create or guess a profile.
+
 ```bash
 chmod +x prepare-kiosk.sh
 ./prepare-kiosk.sh --level 2
@@ -44,7 +46,7 @@ For unattended deployment to the 12 workshop devices:
 
 Use `--no-reboot` to finish configuration without rebooting. Google Chrome must already be installed if selected; Firefox and Chromium are installed through `apt-get` when missing.
 
-Firefox is resolved from the system `PATH`. On current Ubuntu Desktop installations this normally selects `/snap/bin/firefox`; the installer no longer silently prefers a separate Firefox under `~/.local/opt`. Refresh the Firefox Snap before workshop deployment and validate the email-link workflow on each image.
+Firefox is resolved from the system `PATH`. On current Ubuntu Desktop installations this normally selects `/snap/bin/firefox`; the installer no longer silently prefers a separate Firefox under `~/.local/opt`. It resolves Firefox's declared default profile, atomically merges only the close-tab, close-window, and quit overrides into that profile's `customKeys.json`, and launches the kiosk with that same profile. Refresh the Firefox Snap before workshop deployment and validate the shortcut and email-link workflows on each image.
 
 ## Lockdown Levels
 
@@ -77,6 +79,8 @@ Level 2 includes Level 1 and blocks common kiosk escape navigation:
 - `Ctrl+L`, `F11`, `F12`, and common Chromium developer-tools shortcuts
 
 The script uses normal GNOME `gsettings` and custom media-key bindings. It does not install a GNOME Shell extension or modify the top bar. The browser's full-screen kiosk mode covers the desktop UI.
+
+The Firefox profile shortcut overrides apply at either lockdown level when Firefox is selected. Existing unrelated `customKeys.json` entries are preserved.
 
 The installer installs Thunderbird when it is absent, selects an installed Thunderbird desktop entry as the OS `mailto:` handler, and verifies that association with `xdg-mime`. The selected browser still decides whether to delegate a `mailto:` link to the OS, so verify the email-link workflow in the deployed browser profile.
 
@@ -127,6 +131,17 @@ kiosk reset --no-reboot
 Use `kiosk reset` when the instructor should be asked before rebooting. Use `kiosk reset --reboot` only when an immediate reboot after a successful reset is intended.
 
 Reset first builds a complete replacement in a sibling staging directory. It only swaps that directory into place after the baseline and managed launcher have been prepared successfully. The baseline is never replaced by reset. Therefore the resulting autostart directory is the original pre-kiosk content plus the managed `skyline-kiosk.desktop` required to start the kiosk after login.
+
+## Switching Browsers
+
+`kiosk reset` always reuses the browser saved during first-time setup. To redeploy with a different browser, use `kiosk remove` to clear the saved configuration and the managed autostart entry, then run first-time setup with the new browser:
+
+```bash
+kiosk remove
+./prepare-kiosk.sh --level 2 --browser chrome --user kiosk --reboot
+```
+
+`kiosk remove` accepts no options and does not reboot. It removes only the saved configuration at `/var/lib/ctrl-esc-host-kiosk/users/<uid>/config` and the managed `skyline-kiosk.desktop` autostart entry. GDM autologin and GNOME lockdown remain in place until the next setup overwrites them. Install the new browser first if it is not already present; the installer installs Firefox and Chromium through `apt-get` but requires Google Chrome to be pre-installed.
 
 ## Installed Files
 

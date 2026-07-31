@@ -6,7 +6,9 @@
 
 - `0a9c522` — rewrote `prepare-kiosk.sh` (setup + reset), restructured README
 - `1d71186` — added `INSTRUCTOR-CHEATSHEET.md`
-- `1f8ad70` — **hardening**: active GDM service verification (`verify_active_gdm`), sudo-preflight error message, post-install `grep -Fxq` assertions that GDM actually has `AutomaticLoginEnable=True` and `AutomaticLogin=<user>`, Super-lockdown wording. This commit is the one most worth exercising.
+- `1f8ad70` — **hardening**: active GDM service verification, sudo-preflight, post-install GDM assertions
+- Firefox shortcut overrides — resolves Firefox profile, atomically merges `customKeys.json` (`key_close`, `key_closeWindow`, `key_quitApplication`), launches kiosk with `--profile`, restarts Firefox on non-reboot paths
+- `kiosk remove` — clears saved config + autostart entry for browser redeployment
 
 ## Test environment
 
@@ -23,11 +25,14 @@ id -un                       # -> kiosk
 sudo -v                      # accepts instructor password (NEW: preflight now dies with a clear message)
 sudo snap refresh firefox    # use the current Ubuntu Firefox Snap
 command -v firefox           # normally /snap/bin/firefox on Ubuntu
+firefox --version            # must be Firefox 147 or newer
 systemctl is-active display-manager.service                       # -> active
 systemctl show --property=FragmentPath --value display-manager.service  # -> *gdm*.service
 cat /etc/X11/default-display-manager 2>/dev/null                  # -> gdm or gdm3
 ls -l /etc/gdm3/custom.conf /etc/gdm/custom.conf 2>/dev/null      # one must exist
 ```
+
+Launch Firefox once and close it before setup so its selected default profile and `profiles.ini` exist. The installer refuses to invent or guess a profile path.
 
 Remove any stale reserved file:
 
@@ -55,10 +60,13 @@ After reboot, fill in the cheatsheet table per device:
 | Kiosk opens full screen ~5s after login | yes |
 | Super → Activities | blocked |
 | `Alt+F2`, `Alt+F4`, `Alt+Tab` | blocked |
-| `Ctrl+W/T/N/L`, `F11` | blocked |
+| `Ctrl+W`, `Ctrl+Shift+W`, `Ctrl+Q` in Firefox | no effect |
+| `Ctrl+T/N/L`, `F11` at lockdown level 2 | blocked |
+| Multiple tabs and popup windows opened through available controls or links | work normally |
 | `Ctrl+Alt+Shift+O` | opens `gnome-terminal` |
 | `/usr/local/bin/kiosk` | executable; `type -a kiosk` also shows the optional alias |
-| generated `start-kiosk.sh` | uses the system Firefox from `command -v firefox` |
+| generated `start-kiosk.sh` | uses the system Firefox and its resolved kiosk profile |
+| Email link | opens the configured Thunderbird application |
 
 Diagnostics from the cheatsheet:
 
@@ -71,7 +79,14 @@ ls -l ~/.config/autostart/skyline-kiosk.desktop
 sudo cat "/var/lib/ctrl-esc-host-kiosk/users/$(id -u)/config"
 sudo grep -E '^(AutomaticLoginEnable|AutomaticLogin)=' /etc/gdm3/custom.conf
 gsettings get org.gnome.mutter overlay-key   # -> ''
+
+# Use the profile path printed by prepare-kiosk.sh.
+FIREFOX_PROFILE='/path/to/the/resolved/profile'
+python3 -m json.tool "$FIREFOX_PROFILE/customKeys.json"
+stat -c '%U %a %n' "$FIREFOX_PROFILE/customKeys.json"  # -> kiosk 600 ...
 ```
+
+Confirm the JSON retains any preexisting shortcut customizations and also contains empty objects for `key_close`, `key_closeWindow`, and `key_quitApplication`.
 
 ## Stage 4 — mailto escape (the actual workshop exercise)
 
@@ -108,6 +123,38 @@ Confirm reset refuses setup options:
 kiosk reset --level 1   # should die: "kiosk reset reuses the saved browser, user, and level."
 ```
 
+## Stage 5.5 — Browser switch via kiosk remove (Firefox to Chrome)
+
+If Google Chrome is installed, test the browser-switch path:
+
+```bash
+# Install Chrome first if not present:
+# sudo dpkg -i google-chrome-stable_current_amd64.deb
+
+kiosk remove                              # clears saved config + autostart entry
+kiosk remove                              # idempotent: "Nothing to remove."
+
+# Confirm the saved config is gone:
+sudo test -f /var/lib/ctrl-esc-host-kiosk/users/$(id -u)/config && echo FAIL || echo PASS
+
+# Redeploy with Chrome:
+./prepare-kiosk.sh --level 2 --browser chrome --user kiosk --reboot
+```
+
+After reboot, re-verify Stage 3 (Chrome should open full screen; the Firefox-specific `Ctrl+W`/`Ctrl+Q` checks are N/A). Then switch back to Firefox if needed:
+
+```bash
+kiosk remove
+./prepare-kiosk.sh --level 2 --browser firefox --user kiosk --reboot
+```
+
+Confirm remove rejects options:
+
+```bash
+kiosk remove --browser chrome   # should die: "kiosk remove accepts no setup options."
+kiosk remove --reboot           # should die: "kiosk remove does not reboot."
+```
+
 ## Stage 6 — Update path (simulates pulling these commits onto a deployed device)
 
 On an already-configured device, pull and run from the repo:
@@ -124,6 +171,8 @@ Confirm it preserves `/var/lib/ctrl-esc-host-kiosk/users/<uid>/autostart.origina
 sudo ./prepare-kiosk.sh                  # dies: "Do not run this script with sudo."
 ./prepare-kiosk.sh                       # again, on configured account -> "already configured"
 kiosk reset --level 1                    # dies: reset reuses saved options
+kiosk remove --browser chrome            # dies: remove accepts no setup options
+kiosk remove --reboot                    # dies: remove does not reboot
 ```
 
 Point at a non-GDM display manager (e.g. lightdm) → `verify_active_gdm` dies: "The active display manager is '...', not GDM."
