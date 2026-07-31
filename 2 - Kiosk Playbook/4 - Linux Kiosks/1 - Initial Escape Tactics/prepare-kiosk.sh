@@ -576,7 +576,9 @@ generate_kiosk_files() {
   cat >"$KIOSK_WRAPPER_TEMP" <<EOF
 #!/usr/bin/env bash
 export LIBGL_ALWAYS_SOFTWARE=1
-export MOZ_ENABLE_WAYLAND=0
+if [[ "\${XDG_SESSION_TYPE:-}" == "wayland" || -n "\${WAYLAND_DISPLAY:-}" ]]; then
+  export MOZ_ENABLE_WAYLAND=1
+fi
 sleep 5
 exec $browser_command
 EOF
