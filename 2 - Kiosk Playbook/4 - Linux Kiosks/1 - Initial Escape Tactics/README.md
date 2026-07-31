@@ -9,7 +9,20 @@ This directory contains the Linux kiosk setup and the initial escape workshop re
 
 ## First-Time Setup
 
-Run the installer as the desktop user that will become the kiosk account. Do not run the entire script with `sudo`; it requests elevated access only for packages, GDM, `/usr/local` installation, and the root-protected reset state under `/var/lib`.
+Run the installer as the desktop user that will become the kiosk account. The account must be an Ubuntu administrator authorized to use `sudo`; keep its password available to instructors and do not disclose it to participants. Do not make the account UID 0 or run the entire script with `sudo`. The script requests elevated access only for packages, GDM, `/usr/local` installation, and the root-protected reset state under `/var/lib`. Run repository-based setup or update only from an administrator-reviewed checkout because approval installs that script and HTML into root-owned locations.
+
+On a fresh Ubuntu installation, the simplest arrangement is to create `kiosk` as the initial administrator account. To authorize an existing account, run the following from another administrator account, then sign out and back in:
+
+```bash
+sudo usermod -aG sudo kiosk
+sudo passwd kiosk
+```
+
+Confirm authorization before setup:
+
+```bash
+sudo -v
+```
 
 ```bash
 chmod +x prepare-kiosk.sh
@@ -21,7 +34,7 @@ Defaults:
 - Browser: Firefox
 - Lockdown: Level 2
 - Autologin account: Current user
-- Reboot: Ask after successful setup
+- Reboot: Ask after successful setup when stdin is an interactive terminal; otherwise skip reboot
 
 For unattended deployment to the 12 workshop devices:
 
@@ -39,12 +52,14 @@ Use `--no-reboot` to finish configuration without rebooting. Google Chrome must 
 ./prepare-kiosk.sh --level 1
 ```
 
-Level 1 disables the ordinary GNOME Activities and Super-key paths:
+Level 1 disables the ordinary Activities and Super-key paths provided by core GNOME schemas:
 
 - Standalone Super key
 - GNOME Activities Overview and application view shortcuts
 - GNOME hot corners
-- Super-based application, window, workspace, and media-key bindings
+- Super-based application, window, workspace, and media-key bindings in core GNOME schemas
+
+GNOME Shell extensions can define shortcuts in their own schemas. The script does not disable extension-specific bindings such as Ubuntu Dock or third-party tiling-extension shortcuts; verify or configure those separately on the workshop image.
 
 ### Level 2
 
@@ -60,6 +75,8 @@ Level 2 includes Level 1 and blocks common kiosk escape navigation:
 - `Ctrl+L`, `F11`, `F12`, and common Chromium developer-tools shortcuts
 
 The script uses normal GNOME `gsettings` and custom media-key bindings. It does not install a GNOME Shell extension or modify the top bar. The browser's full-screen kiosk mode covers the desktop UI.
+
+The installer installs Thunderbird when it is absent, selects an installed Thunderbird desktop entry as the OS `mailto:` handler, and verifies that association with `xdg-mime`. The selected browser still decides whether to delegate a `mailto:` link to the OS, so verify the email-link workflow in the deployed browser profile.
 
 ## Instructor Recovery
 
@@ -92,7 +109,7 @@ The first setup captures `~/.config/autostart` before adding the kiosk launcher.
 3. Adds the managed `skyline-kiosk.desktop` entry back on top of the baseline.
 4. Refreshes the installed kiosk HTML and browser wrapper.
 5. Reapplies GDM autologin, the saved lockdown level, and the instructor shortcut.
-6. Asks whether to reboot.
+6. Asks whether to reboot when run from an interactive terminal. Without an interactive terminal it skips reboot unless `--reboot` is supplied.
 
 Use either reboot mode when scripting a reset:
 
@@ -100,6 +117,8 @@ Use either reboot mode when scripting a reset:
 kiosk reset --reboot
 kiosk reset --no-reboot
 ```
+
+`kiosk reset` validates sudo authorization before making changes. Unless a sudo credential is already cached, the instructor enters the `kiosk` account password and then chooses whether to reboot. Run only one reset at a time on each device; separate devices can be reset simultaneously.
 
 Reset first builds a complete replacement in a sibling staging directory. It only swaps that directory into place after the baseline and managed launcher have been prepared successfully. The baseline is never replaced by reset. Therefore the resulting autostart directory is the original pre-kiosk content plus the managed `skyline-kiosk.desktop` required to start the kiosk after login.
 
@@ -127,8 +146,8 @@ The installer supports both common GDM configuration paths:
 /etc/gdm/custom.conf
 ```
 
-It creates a one-time sibling backup ending in `.ctrl-esc-host-original`, preserves unrelated configuration, and configures the selected user under `[daemon]`.
+It first verifies that the active systemd display-manager service and Debian display-manager selection, when present, identify GDM. It then creates a one-time sibling backup ending in `.ctrl-esc-host-original`, preserves unrelated configuration, configures the selected user under `[daemon]`, and verifies the installed values.
 
 ## Scope
 
-The lockdown targets common GNOME and browser navigation used to escape a full-screen workshop kiosk. It does not disable Linux virtual-terminal switching such as `Ctrl+Alt+F3`, firmware keys, or physical access recovery.
+The lockdown targets common core GNOME and browser navigation used to escape a full-screen workshop kiosk. It does not manage GNOME Shell extension shortcuts or disable Linux virtual-terminal switching such as `Ctrl+Alt+F3`, firmware keys, or physical access recovery.

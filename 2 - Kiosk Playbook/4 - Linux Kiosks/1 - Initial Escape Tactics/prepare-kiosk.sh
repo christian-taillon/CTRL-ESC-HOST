@@ -28,6 +28,7 @@ export PATH
 SUDO_BIN="/usr/bin/sudo"
 ID_BIN="/usr/bin/id"
 GETENT_BIN="/usr/bin/getent"
+SYSTEMCTL_BIN="/usr/bin/systemctl"
 
 PROGRAM_NAME="${0##*/}"
 SCRIPT_PATH="${BASH_SOURCE[0]}"
@@ -72,6 +73,7 @@ KIOSK_DESKTOP_TEMP=""
 BROWSER_BIN=""
 TERMINAL_BIN=""
 SOURCE_HTML=""
+GDM_VARIANT=""
 
 BLOCK_BINDING_IDS=(
   terminal
@@ -137,11 +139,14 @@ First-run options:
   -h, --help                  Show this help
 
 Lockdown levels:
-  1  Disable Activities, hot corners, and Super-based GNOME navigation.
+  1  Disable Activities, hot corners, and core GNOME Super navigation.
   2  Level 1 plus common GNOME and browser escape shortcuts.
 
 The instructor recovery shortcut is Ctrl+Alt+Shift+O. It opens a terminal so
 the instructor can run: kiosk reset
+
+The kiosk account must be authorized to use sudo. Keep its password available
+to instructors; do not run this script as root.
 EOF
 }
 
@@ -339,7 +344,9 @@ preflight() {
   command -v gsettings &>/dev/null || die "gsettings is required for GNOME lockdown."
   [[ -x "$GETENT_BIN" && -x "$ID_BIN" ]] || die "Trusted id/getent utilities are required."
 
-  "$SUDO_BIN" -v
+  if ! "$SUDO_BIN" -v; then
+    die "'$CURRENT_USER' must be authorized to use sudo. Configure the kiosk account as an Ubuntu administrator before setup or reset."
+  fi
 }
 
 install_dependencies() {
@@ -612,10 +619,41 @@ configure_mail_handler() {
   log "Thunderbird is the default mailto handler."
 }
 
+verify_active_gdm() {
+  local fragment_path
+  local fragment_name
+  local default_manager
+  local default_name
+
+  [[ -x "$SYSTEMCTL_BIN" ]] || die "$SYSTEMCTL_BIN is required to verify GDM."
+  run_root "$SYSTEMCTL_BIN" is-active --quiet display-manager.service || die "The system display manager is not active. Refusing to configure GDM autologin."
+
+  fragment_path="$(run_root "$SYSTEMCTL_BIN" show --property=FragmentPath --value display-manager.service)" || die "Unable to identify the active display manager."
+  fragment_name="${fragment_path##*/}"
+  case "$fragment_name" in
+  gdm.service) GDM_VARIANT="gdm" ;;
+  gdm3.service) GDM_VARIANT="gdm3" ;;
+  *) die "The active display manager is '$fragment_name', not GDM. Refusing to configure autologin." ;;
+  esac
+
+  if run_root test -f /etc/X11/default-display-manager; then
+    default_manager="$(run_root cat /etc/X11/default-display-manager)" || die "Unable to read /etc/X11/default-display-manager."
+    default_name="${default_manager##*/}"
+    case "$default_name" in
+    gdm | gdm3) GDM_VARIANT="$default_name" ;;
+    *) die "Debian's configured display manager is '$default_name', not GDM. Refusing to configure autologin." ;;
+    esac
+  fi
+}
+
 detect_gdm_configuration() {
-  if run_root test -f /etc/gdm3/custom.conf; then
+  if [[ "$GDM_VARIANT" == "gdm3" ]] && run_root test -f /etc/gdm3/custom.conf; then
     printf '%s\n' /etc/gdm3/custom.conf
-  elif run_root test -f /etc/gdm/custom.conf; then
+  elif [[ "$GDM_VARIANT" == "gdm" ]] && run_root test -f /etc/gdm/custom.conf; then
+    printf '%s\n' /etc/gdm/custom.conf
+  elif run_root test -f /etc/gdm3/custom.conf && ! run_root test -f /etc/gdm/custom.conf; then
+    printf '%s\n' /etc/gdm3/custom.conf
+  elif run_root test -f /etc/gdm/custom.conf && ! run_root test -f /etc/gdm3/custom.conf; then
     printf '%s\n' /etc/gdm/custom.conf
   else
     return 1
@@ -627,7 +665,8 @@ configure_gdm_autologin() {
   local backup_file
   local root_temporary_file
 
-  gdm_conf="$(detect_gdm_configuration)" || die "Neither /etc/gdm3/custom.conf nor /etc/gdm/custom.conf exists."
+  verify_active_gdm
+  gdm_conf="$(detect_gdm_configuration)" || die "Unable to select the active GDM configuration from /etc/gdm3/custom.conf or /etc/gdm/custom.conf."
   backup_file="$gdm_conf.ctrl-esc-host-original"
 
   if ! run_root test -e "$backup_file"; then
@@ -695,6 +734,8 @@ configure_gdm_autologin() {
   run_root chown --reference="$gdm_conf" "$root_temporary_file"
   run_root chmod --reference="$gdm_conf" "$root_temporary_file"
   run_root mv -f "$root_temporary_file" "$gdm_conf"
+  run_root grep -Fxq "AutomaticLoginEnable=True" "$gdm_conf" || die "Installed GDM configuration does not enable automatic login."
+  run_root grep -Fxq "AutomaticLogin=$KIOSK_USER" "$gdm_conf" || die "Installed GDM configuration does not select the kiosk account."
   log "Configured GDM automatic login for '$KIOSK_USER'."
 }
 
@@ -931,7 +972,7 @@ apply_managed_custom_bindings() {
 apply_level_one_lockdown() {
   local schema
 
-  log "Applying lockdown level 1 (Activities and Super navigation)..."
+  log "Applying lockdown level 1 (Activities and core GNOME Super navigation)..."
   set_required_gsettings_key "org.gnome.mutter" overlay-key "''"
   set_required_gsettings_key "org.gnome.desktop.interface" enable-hot-corners "false"
   set_required_gsettings_key "org.gnome.shell.keybindings" toggle-overview "[]"

@@ -5,36 +5,56 @@ Use this guide to deploy, validate, recover, and reset the CTRL+ESC+HOST worksho
 ## Recommended Configuration
 
 - Desktop: GNOME with GDM
-- Kiosk account: `kiosk`
+- Kiosk account: `kiosk`, configured as an Ubuntu administrator
 - Browser: Firefox
 - Lockdown: Level 2
 - Instructor recovery shortcut: `Ctrl+Alt+Shift+O`
 - Workshop reset command: `kiosk reset`
 
-Level 2 disables the ordinary Activities/Super paths, common GNOME navigation, standard terminal shortcuts, and common browser escape shortcuts. It leaves the instructor recovery shortcut available.
+Level 2 disables the ordinary Activities/Super paths and navigation exposed by core GNOME schemas, standard terminal shortcuts, and common browser escape shortcuts. It leaves the instructor recovery shortcut available. Extension-specific shortcuts, including Ubuntu Dock or third-party tiling extensions, must be validated separately on the workshop image.
 
 ## Before First Setup
 
-Complete these checks before running the installer on each device:
+Use this workflow on each fresh device:
 
-1. Log into the GNOME desktop as the account that will become the kiosk account.
-2. Confirm the account name with `id -un`.
-3. Confirm `~/.config/autostart` contains the baseline that should be restored between students.
-4. Remove or rename any pre-existing `~/.config/autostart/skyline-kiosk.desktop` file.
-5. Confirm the repository contains both `prepare-kiosk.sh` and `airline_kiosk.html` in the same directory.
+1. Install Ubuntu Desktop with GNOME and GDM.
+2. Create `kiosk` as Ubuntu's initial administrator account. This is a normal sudo-enabled account, not UID 0/root.
+3. Keep the `kiosk` password instructor-only and log into GNOME as `kiosk`.
+4. Install Git and Thunderbird.
+5. Clone the repository and enter the Linux kiosk directory.
+6. Confirm `id -un` returns `kiosk` and `sudo -v` accepts the instructor-held password.
+7. Confirm `~/.config/autostart` contains the baseline that should be restored between students.
+8. Remove or rename any pre-existing `~/.config/autostart/skyline-kiosk.desktop` file.
+
+```bash
+sudo apt-get update
+sudo apt-get install -y git thunderbird
+git clone https://github.com/CroodSolutions/CTRL-ESC-HOST.git
+cd "CTRL-ESC-HOST/2 - Kiosk Playbook/4 - Linux Kiosks/1 - Initial Escape Tactics"
+id -un
+sudo -v
+```
+
+If `kiosk` already exists as a standard account, another administrator can authorize it before setup. Sign out and back in afterward:
+
+```bash
+sudo usermod -aG sudo kiosk
+sudo passwd kiosk
+```
+
+The script cannot authenticate as a different administrator. Do not make `kiosk` UID 0 and do not configure unrestricted passwordless sudo.
 
 The first run captures the autostart baseline once. Reset never replaces that baseline, so make sure the device is clean before initial setup.
 
 ## Deploy One Device
 
-Run as the logged-in kiosk user, not with `sudo`:
+Run this one setup command as the logged-in `kiosk` user, not with `sudo`:
 
 ```bash
-chmod +x prepare-kiosk.sh
-./prepare-kiosk.sh --level 2 --browser firefox --user kiosk
+./prepare-kiosk.sh --user kiosk
 ```
 
-The installer requests `sudo` only when required. At the end, choose whether to reboot.
+This uses the defaults: Firefox, Level 2, and an interactive reboot choice. The installer requests the instructor-held `kiosk` password through `sudo` only when required. Choose `y` at the final prompt to reboot into the kiosk. A noninteractive invocation skips reboot unless `--reboot` is supplied.
 
 To configure and reboot without the final prompt:
 
@@ -67,7 +87,9 @@ Record successful validation for each device before the workshop:
 | `Ctrl+W`, `Ctrl+T`, `Ctrl+N`, `Ctrl+L`, and `F11` are blocked | |
 | `Ctrl+Alt+Shift+O` opens `gnome-terminal` | |
 | `command -v kiosk` returns `/usr/local/bin/kiosk` | |
-| Email link opens the expected Thunderbird workflow | |
+| Browser delegates the Email link to the configured Thunderbird handler | |
+
+Firefox `mailto:` delegation is validated operationally. The script configures and verifies Thunderbird as the OS handler, but Firefox still decides whether to hand the link to the OS.
 
 ## Lockdown Level Reference
 
@@ -95,9 +117,9 @@ From the full-screen kiosk:
 
 1. Press `Ctrl+Alt+Shift+O`.
 2. Wait for `gnome-terminal` to open.
-3. Run the reset command.
+3. Run the reset command and enter the instructor-held `kiosk` password when sudo requests it.
 
-Reset and ask before rebooting:
+Reset and ask before rebooting when run from an interactive terminal:
 
 ```bash
 kiosk reset
@@ -124,6 +146,8 @@ For normal workshop turnover, use `kiosk reset --reboot`. It performs the follow
 5. Refreshes the kiosk HTML and launch wrapper.
 6. Reapplies Thunderbird handling, GDM autologin, GNOME lockdown, and instructor recovery.
 7. Reboots into the full-screen kiosk.
+
+Manual hourly resets are supported. "One reset at a time" means do not start a second `kiosk reset` process on the same device before the first one finishes. Resetting different devices simultaneously is safe.
 
 ## Emergency Recovery
 
@@ -156,6 +180,8 @@ After pulling a newer repository version, run the repository copy with the `rese
 ```
 
 This retains the original baseline and saved deployment choices while updating the installed script and HTML under `/usr/local`.
+
+Treat this as an administrative software installation. Use a fresh, trusted repository checkout and do not perform a repository-based update while untrusted processes are running as the kiosk account.
 
 Do not run first-time setup again on an already configured account. It intentionally stops with:
 
@@ -222,7 +248,12 @@ sudo cat "/var/lib/ctrl-esc-host-kiosk/users/$(id -u)/config"
 Confirm the GDM autologin values:
 
 ```bash
-sudo grep -E '^(AutomaticLoginEnable|AutomaticLogin)=' /etc/gdm3/custom.conf
+if [[ -f /etc/gdm3/custom.conf ]]; then
+  gdm_conf=/etc/gdm3/custom.conf
+else
+  gdm_conf=/etc/gdm/custom.conf
+fi
+sudo grep -E '^(AutomaticLoginEnable|AutomaticLogin)=' "$gdm_conf"
 ```
 
 Confirm the Activities overlay key is disabled:
@@ -249,6 +280,17 @@ Run it again as the logged-in kiosk user:
 
 The script invokes `sudo` internally when needed.
 
+### Kiosk Account Is Not Authorized for sudo
+
+From another Ubuntu administrator account, authorize `kiosk`, set the instructor-held password, and then sign out and back in as `kiosk`:
+
+```bash
+sudo usermod -aG sudo kiosk
+sudo passwd kiosk
+```
+
+Do not run the kiosk as UID 0/root. Setup and reset must run in the active `kiosk` GNOME session.
+
 ### Account Is Already Configured
 
 Use:
@@ -261,9 +303,17 @@ kiosk reset --reboot
 
 Run first-time setup from the repository. `kiosk reset` only works after setup successfully saves the deployment configuration.
 
-### GDM Configuration Was Not Found
+### GDM Is Not Active or Its Configuration Was Not Found
 
-Confirm the device uses GNOME with GDM and has either:
+Confirm `display-manager.service` is active, resolves to `gdm.service` or `gdm3.service`, and the Debian display-manager selection identifies GDM:
+
+```bash
+systemctl is-active display-manager.service
+systemctl show --property=FragmentPath --value display-manager.service
+cat /etc/X11/default-display-manager
+```
+
+The system must also have either:
 
 ```text
 /etc/gdm3/custom.conf
