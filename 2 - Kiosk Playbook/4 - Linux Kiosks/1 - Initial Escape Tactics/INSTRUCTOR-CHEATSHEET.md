@@ -1,14 +1,8 @@
 # Linux Kiosk Instructor Cheatsheet
 
-## Set Up a Kiosk
+## Start the Kiosk
 
-From this directory, run the setup as the logged-in `kiosk` user, **not** with `sudo`:
-
-```bash
-./prepare-kiosk.sh --level 2 --browser firefox --user kiosk --reboot
-```
-
-Enter the instructor-held `kiosk` password when prompted. For prerequisites and other options, see the [full setup guide](README.md).
+Plug in the device and turn it on. No setup is needed.
 
 ## What Reboot Should Do
 
@@ -16,11 +10,11 @@ Enter the instructor-held `kiosk` password when prompted. For prerequisites and 
 2. GNOME autostart runs `~/Public/start-kiosk.sh`.
 3. The kiosk app opens full screen after about five seconds.
 
-Confirm that `Ctrl+Alt+Shift+O` opens the instructor terminal and that common escape shortcuts such as `Super`, `Alt+Tab`, and `Ctrl+L` are blocked.
+If the kiosk does not appear, wait briefly, then use the recovery steps below.
 
 ## Reset Between Students
 
-If anything fails or the kiosk is changed:
+If the kiosk is broken, changed, or does not start correctly:
 
 1. Press `Ctrl+Alt+Shift+O`.
 2. Run:
@@ -29,9 +23,9 @@ If anything fails or the kiosk is changed:
 kiosk reset --reboot
 ```
 
-The reset restores the original autostart baseline, kiosk files, GDM automatic login, GNOME lockdown, and instructor shortcut. It then reboots so GDM can log in and launch the kiosk app again.
+The reset restores the original kiosk files and autostart configuration, reapplies GDM automatic login and lockdown, and reboots. After reboot, GDM should automatically log in and launch the kiosk app.
 
-Run only one reset at a time on each device. If a newly pulled repository version must be installed, run `./prepare-kiosk.sh reset --reboot` from this directory instead.
+Run only one reset at a time on each device. If the recovery shortcut does not work, contact the technical lead rather than changing system files.
 
 ## Workshop Links
 
