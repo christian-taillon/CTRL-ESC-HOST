@@ -42,20 +42,19 @@ Even if the browser is sandboxed (Snap/Flatpak), triggering an external app brea
 
 ### 1. Configure the Environment
 
-The setup script prepares the machine by installing necessary viewers and configuring the desktop environment.
+The setup script installs the kiosk runtime, configures automatic login, captures the original autostart baseline, and applies the selected GNOME lockdown level.
 
 ```bash
 chmod +x ../prepare-kiosk.sh
-../prepare-kiosk.sh
+../prepare-kiosk.sh --level 2
 
 ```
 
-* **Manual Mode:** Adds "SkyLine Kiosk" to your App Menu and Desktop for testing.
-* **Persistence Mode:** Adds the kiosk to `~/.config/autostart` to launch automatically on login/reboot.
+The script asks whether to reboot after setup. Use `--reboot` for unattended deployment or `--no-reboot` to defer it.
 
 ### 2. Launching the Attack Simulation
 
-If using the manual shortcut, simply click the "SkyLine Kiosk" icon. To launch manually from the terminal:
+The kiosk starts automatically after GDM logs into the configured account. To launch the demo manually during development:
 
 ```bash
 firefox --kiosk "file://$(pwd)/../airline_kiosk.html"
@@ -111,7 +110,15 @@ cd ~/.config/autostart/
 
 ```
 
-The `../prepare-kiosk.sh` script demonstrates this by placing the Kiosk launch file here. An attacker would replace or append to this to launch their own payload alongside (or instead of) the Kiosk app.
+The `../prepare-kiosk.sh` script places the kiosk launch file here. An attacker would replace or append to this to launch their own payload alongside (or instead of) the kiosk app.
+
+For workshop recovery, the instructor can press `Ctrl+Alt+Shift+O` to open a terminal and run:
+
+```bash
+kiosk reset
+```
+
+Reset removes the participant-modified autostart directory, restores the first-run baseline, recreates the managed kiosk launcher, and offers to reboot.
 
 ---
 
