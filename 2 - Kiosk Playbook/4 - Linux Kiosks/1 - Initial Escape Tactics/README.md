@@ -4,6 +4,7 @@ This directory contains the Linux kiosk setup and the initial escape workshop re
 
 - `prepare-kiosk.sh`: One-time GNOME kiosk installer and workshop reset utility.
 - `airline_kiosk.html`: SkyLine Premium full-screen kiosk demo.
+- `INSTRUCTOR-CHEATSHEET.md`: Deployment, validation, recovery, and between-student reset commands.
 - `Protocol-Handler-Escape/`: Protocol-handler breakout walkthrough.
 
 ## First-Time Setup
