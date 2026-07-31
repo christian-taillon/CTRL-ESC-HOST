@@ -29,6 +29,7 @@ Use this workflow on each fresh device:
 ```bash
 sudo apt-get update
 sudo apt-get install -y git thunderbird
+sudo snap refresh firefox
 git clone https://github.com/CroodSolutions/CTRL-ESC-HOST.git
 cd "CTRL-ESC-HOST/2 - Kiosk Playbook/4 - Linux Kiosks/1 - Initial Escape Tactics"
 id -un
@@ -55,6 +56,12 @@ Run this one setup command as the logged-in `kiosk` user, not with `sudo`:
 ```
 
 This uses the defaults: Firefox, Level 2, and an interactive reboot choice. The installer requests the instructor-held `kiosk` password through `sudo` only when required. Choose `y` at the final prompt to reboot into the kiosk. A noninteractive invocation skips reboot unless `--reboot` is supplied.
+
+The installer uses the system Firefox returned by `command -v firefox`, normally `/snap/bin/firefox` on Ubuntu. It also attempts to add `alias kiosk='/usr/local/bin/kiosk'` to a regular, writable `~/.bashrc`. New terminals load the alias automatically; in this existing setup terminal, load it with:
+
+```bash
+source ~/.bashrc
+```
 
 To configure and reboot without the final prompt:
 
@@ -86,7 +93,8 @@ Record successful validation for each device before the workshop:
 | `Alt+F2`, `Alt+F4`, and `Alt+Tab` are blocked | |
 | `Ctrl+W`, `Ctrl+T`, `Ctrl+N`, `Ctrl+L`, and `F11` are blocked | |
 | `Ctrl+Alt+Shift+O` opens `gnome-terminal` | |
-| `command -v kiosk` returns `/usr/local/bin/kiosk` | |
+| `/usr/local/bin/kiosk` is executable; `type -a kiosk` also shows the Bash alias when installed | |
+| `grep '^exec ' ~/Public/start-kiosk.sh` uses the system Firefox | |
 | Browser delegates the Email link to the configured Thunderbird handler | |
 
 Firefox `mailto:` delegation is validated operationally. The script configures and verifies Thunderbird as the OS handler, but Firefox still decides whether to hand the link to the OS.
@@ -117,7 +125,7 @@ From the full-screen kiosk:
 
 1. Press `Ctrl+Alt+Shift+O`.
 2. Wait for `gnome-terminal` to open.
-3. Run the reset command and enter the instructor-held `kiosk` password when sudo requests it.
+3. Run the reset command and enter the instructor-held `kiosk` password when sudo requests it. A newly opened recovery terminal already loaded `~/.bashrc`; run `source ~/.bashrc` only in a pre-existing Bash prompt that has not loaded the alias.
 
 Reset and ask before rebooting when run from an interactive terminal:
 
@@ -130,6 +138,8 @@ Reset and reboot automatically:
 ```bash
 kiosk reset --reboot
 ```
+
+This command is appropriate after the repository version has already been installed and a successful reset should reboot immediately. To install a newly pulled repository version, use `./prepare-kiosk.sh reset --reboot` from the repository instead.
 
 Reset without rebooting:
 
@@ -230,7 +240,15 @@ Some systems use `/etc/gdm/custom.conf` instead.
 Confirm the installed command:
 
 ```bash
-command -v kiosk
+type -a kiosk
+test -x /usr/local/bin/kiosk
+```
+
+Confirm Firefox resolution and the generated launch command:
+
+```bash
+command -v firefox
+grep '^exec ' ~/Public/start-kiosk.sh
 ```
 
 Confirm the active kiosk autostart entry:

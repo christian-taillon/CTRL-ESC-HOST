@@ -44,6 +44,8 @@ For unattended deployment to the 12 workshop devices:
 
 Use `--no-reboot` to finish configuration without rebooting. Google Chrome must already be installed if selected; Firefox and Chromium are installed through `apt-get` when missing.
 
+Firefox is resolved from the system `PATH`. On current Ubuntu Desktop installations this normally selects `/snap/bin/firefox`; the installer no longer silently prefers a separate Firefox under `~/.local/opt`. Refresh the Firefox Snap before workshop deployment and validate the email-link workflow on each image.
+
 ## Lockdown Levels
 
 ### Level 1
@@ -92,6 +94,8 @@ It opens `gnome-terminal`. From that terminal, restore the workshop kiosk with:
 kiosk reset
 ```
 
+The installer also adds `alias kiosk='/usr/local/bin/kiosk'` to `~/.bashrc`. New Bash terminals load it automatically. In a terminal that was already open during setup, run `source ~/.bashrc`; the global `/usr/local/bin/kiosk` command remains available even without the alias.
+
 The shortcut is an operational recovery path, not a security boundary. A participant who obtains a shell can inspect GNOME settings or the setup source.
 
 ## Autostart Backup and Reset
@@ -119,6 +123,8 @@ kiosk reset --no-reboot
 ```
 
 `kiosk reset` validates sudo authorization before making changes. Unless a sudo credential is already cached, the instructor enters the `kiosk` account password and then chooses whether to reboot. Run only one reset at a time on each device; separate devices can be reset simultaneously.
+
+Use `kiosk reset` when the instructor should be asked before rebooting. Use `kiosk reset --reboot` only when an immediate reboot after a successful reset is intended.
 
 Reset first builds a complete replacement in a sibling staging directory. It only swaps that directory into place after the baseline and managed launcher have been prepared successfully. The baseline is never replaced by reset. Therefore the resulting autostart directory is the original pre-kiosk content plus the managed `skyline-kiosk.desktop` required to start the kiosk after login.
 

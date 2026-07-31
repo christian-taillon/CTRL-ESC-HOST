@@ -358,7 +358,7 @@ install_dependencies() {
 
   case "$BROWSER_NAME" in
   firefox)
-    if [[ ! -x "$KIOSK_HOME/.local/opt/firefox/firefox" ]] && ! command -v firefox &>/dev/null; then
+    if ! command -v firefox &>/dev/null; then
       packages+=(firefox)
     fi
     ;;
@@ -389,11 +389,7 @@ install_dependencies() {
 resolve_browser() {
   case "$BROWSER_NAME" in
   firefox)
-    if [[ -x "$KIOSK_HOME/.local/opt/firefox/firefox" ]]; then
-      BROWSER_BIN="$KIOSK_HOME/.local/opt/firefox/firefox"
-    else
-      BROWSER_BIN="$(command -v firefox || true)"
-    fi
+    BROWSER_BIN="$(command -v firefox || true)"
     ;;
   chromium)
     BROWSER_BIN="$(command -v chromium-browser || command -v chromium || true)"
@@ -404,6 +400,7 @@ resolve_browser() {
   esac
 
   [[ -n "$BROWSER_BIN" && -x "$BROWSER_BIN" ]] || die "Unable to resolve the '$BROWSER_NAME' browser executable."
+  log "Resolved browser executable: $BROWSER_BIN"
   TERMINAL_BIN="$(command -v gnome-terminal || true)"
   [[ -n "$TERMINAL_BIN" && -x "$TERMINAL_BIN" ]] || die "gnome-terminal is required for the instructor recovery shortcut."
 }
@@ -423,6 +420,24 @@ install_kiosk_command() {
 #!/usr/bin/env bash
 exec /usr/local/libexec/ctrl-esc-host-kiosk/prepare-kiosk.sh "$@"
 EOF
+}
+
+configure_bash_alias() {
+  local bashrc="$KIOSK_HOME/.bashrc"
+  local alias_line="alias kiosk='$INSTALL_COMMAND'"
+
+  if [[ -L "$bashrc" || ( -e "$bashrc" && ! -f "$bashrc" ) ]]; then
+    warn "Skipping the optional Bash alias because $bashrc is not a regular file."
+    return
+  fi
+  if [[ -f "$bashrc" ]] && grep -Fxq -- "$alias_line" "$bashrc"; then
+    return
+  fi
+  if ! printf '\n# CTRL+ESC+HOST kiosk recovery command\n%s\n' "$alias_line" >>"$bashrc"; then
+    warn "Unable to add the optional kiosk alias to $bashrc. The global $INSTALL_COMMAND command is still available."
+    return
+  fi
+  log "Added the Bash alias for '$INSTALL_COMMAND'. Run 'source ~/.bashrc' in an existing Bash prompt to load it."
 }
 
 backup_autostart_once() {
@@ -1099,6 +1114,7 @@ run_setup() {
   install_dependencies
   resolve_browser
   install_kiosk_command
+  configure_bash_alias
   prepare_autostart_stage
   generate_kiosk_files "$AUTOSTART_STAGE"
   configure_mail_handler
@@ -1125,6 +1141,7 @@ run_reset() {
   install_dependencies
   resolve_browser
   install_kiosk_command
+  configure_bash_alias
   prepare_autostart_stage
   generate_kiosk_files "$AUTOSTART_STAGE"
   configure_mail_handler

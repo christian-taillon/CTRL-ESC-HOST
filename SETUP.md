@@ -21,6 +21,8 @@ Confirm the prerequisites the new hardening checks for. If any fail, the script 
 ```bash
 id -un                       # -> kiosk
 sudo -v                      # accepts instructor password (NEW: preflight now dies with a clear message)
+sudo snap refresh firefox    # use the current Ubuntu Firefox Snap
+command -v firefox           # normally /snap/bin/firefox on Ubuntu
 systemctl is-active display-manager.service                       # -> active
 systemctl show --property=FragmentPath --value display-manager.service  # -> *gdm*.service
 cat /etc/X11/default-display-manager 2>/dev/null                  # -> gdm or gdm3
@@ -55,12 +57,16 @@ After reboot, fill in the cheatsheet table per device:
 | `Alt+F2`, `Alt+F4`, `Alt+Tab` | blocked |
 | `Ctrl+W/T/N/L`, `F11` | blocked |
 | `Ctrl+Alt+Shift+O` | opens `gnome-terminal` |
-| `command -v kiosk` | `/usr/local/bin/kiosk` |
+| `/usr/local/bin/kiosk` | executable; `type -a kiosk` also shows the optional alias |
+| generated `start-kiosk.sh` | uses the system Firefox from `command -v firefox` |
 
 Diagnostics from the cheatsheet:
 
 ```bash
-command -v kiosk
+type -a kiosk
+test -x /usr/local/bin/kiosk
+command -v firefox
+grep '^exec ' ~/Public/start-kiosk.sh
 ls -l ~/.config/autostart/skyline-kiosk.desktop
 sudo cat "/var/lib/ctrl-esc-host-kiosk/users/$(id -u)/config"
 sudo grep -E '^(AutomaticLoginEnable|AutomaticLogin)=' /etc/gdm3/custom.conf
@@ -80,16 +86,21 @@ This validates the exercise still works end-to-end.
 From the shell you just spawned, and then again via the recovery shortcut (`Ctrl+Alt+Shift+O`):
 
 ```bash
+# Needed only for a Bash prompt that was already open when setup added the alias.
+source ~/.bashrc
+
 # via recovery shortcut Ctrl+Alt+Shift+O
 kiosk reset            # interactive, asks about reboot
 ```
 
-Re-verify Stage 3 after reset. Then test the non-interactive modes the cheatsheet documents:
+Re-verify Stage 3 after reset. Then test the explicit reboot modes the cheatsheet documents. Test the rebooting case last:
 
 ```bash
-kiosk reset --reboot
 kiosk reset --no-reboot
+kiosk reset --reboot
 ```
+
+Use `kiosk reset --reboot` after the updated repository script has already been installed. When testing a newly pulled script, use the repository update path in Stage 6 so the installed command and HTML are refreshed before reboot.
 
 Confirm reset refuses setup options:
 
