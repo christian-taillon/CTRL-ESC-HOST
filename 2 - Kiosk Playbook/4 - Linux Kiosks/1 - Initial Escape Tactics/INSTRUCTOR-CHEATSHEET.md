@@ -50,6 +50,13 @@ If you choose to enable it on a device, pass it during first-time setup. It inst
 ./prepare-kiosk.sh --level 2 --browser firefox --user kiosk --disable-gnome-clickable --reboot
 ```
 
+To toggle it on an already-configured device without a full re-setup, pass either flag to `kiosk reset`. The new state is persisted and applied on reboot:
+
+```bash
+kiosk reset --disable-gnome-clickable --reboot      # hide the Activities button
+kiosk reset --no-disable-gnome-clickable --reboot   # restore the Activities button
+```
+
 ## Workshop Links
 
 - [Linux kiosk playbook](../README.md)

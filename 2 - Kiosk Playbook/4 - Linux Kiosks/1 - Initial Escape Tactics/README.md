@@ -53,7 +53,14 @@ To also hide the clickable Activities button in the GNOME top bar (useful if a p
 ./prepare-kiosk.sh --level 2 --browser firefox --user kiosk --disable-gnome-clickable --reboot
 ```
 
-The flag is optional and off by default while the approach is validated across the workshop images. When set, the installer installs and enables the `user-theme` GNOME Shell extension (`gnome-shell-extension-user-theme`) and drops a small user theme under `~/.themes/ctrl-esc-host-kiosk/gnome-shell/gnome-shell.css` that hides the `#panelActivities` button. The change takes effect on the next GNOME Shell restart or login. `kiosk reset` reuses the saved `--disable-gnome-clickable` state; pass the flag again on first-time setup to change it.
+The flag is optional and off by default while the approach is validated across the workshop images. When set, the installer installs and enables the `user-theme` GNOME Shell extension (`gnome-shell-extension-user-theme`) and drops a small user theme under `~/.themes/ctrl-esc-host-kiosk/gnome-shell/gnome-shell.css` that hides the `#panelActivities` button. The change takes effect on the next GNOME Shell restart or login.
+
+`kiosk reset` reuses the saved `--disable-gnome-clickable` state. To toggle it on an already-configured device without a full re-setup, pass either flag to `kiosk reset`; the new state is persisted and applied:
+
+```bash
+kiosk reset --disable-gnome-clickable --reboot      # hide the Activities button
+kiosk reset --no-disable-gnome-clickable --reboot  # restore the Activities button
+```
 
 Firefox is resolved from the system `PATH`. On current Ubuntu Desktop installations this normally selects `/snap/bin/firefox`; the installer no longer silently prefers a separate Firefox under `~/.local/opt`. It resolves Firefox's declared default profile, atomically merges only the close-tab, close-window, and quit overrides into that profile's `customKeys.json`, and launches the kiosk with that same profile. Refresh the Firefox Snap before workshop deployment and validate the shortcut and email-link workflows on each image.
 

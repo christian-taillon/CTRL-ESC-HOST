@@ -56,6 +56,7 @@ REBOOT_MODE="ask"
 REBOOT_OPTION_SEEN="false"
 SETUP_OPTION_SEEN="false"
 DISABLE_GNOME_CLICKABLE="false"
+GNOME_CLICKABLE_OVERRIDE_SEEN="false"
 
 USER_THEME_EXTENSION_UUID="user-theme@gnome-shell-extensions.gcampax.github.com"
 USER_THEME_EXTENSION_PACKAGE="gnome-shell-extension-user-theme"
@@ -156,6 +157,10 @@ First-run options:
                               GNOME top bar (installs/enables the user-theme
                               GNOME Shell extension and a small theme). Off by
                               default while the approach is validated.
+  --no-disable-gnome-clickable
+                              Re-enable the Activities button and remove the
+                              kiosk theme. Accepted on setup or reset to toggle
+                              the saved state.
   --reboot                    Reboot automatically after success
   --no-reboot                 Do not reboot after success
   -h, --help                  Show this help
@@ -281,7 +286,12 @@ parse_arguments() {
       ;;
     --disable-gnome-clickable)
       DISABLE_GNOME_CLICKABLE="true"
-      SETUP_OPTION_SEEN="true"
+      GNOME_CLICKABLE_OVERRIDE_SEEN="true"
+      shift
+      ;;
+    --no-disable-gnome-clickable)
+      DISABLE_GNOME_CLICKABLE="false"
+      GNOME_CLICKABLE_OVERRIDE_SEEN="true"
       shift
       ;;
     -h | --help)
@@ -301,10 +311,10 @@ parse_arguments() {
   esac
 
   if [[ "$ACTION" == "reset" && "$SETUP_OPTION_SEEN" == "true" ]]; then
-    die "kiosk reset reuses the saved browser, user, level, and --disable-gnome-clickable state. Only reboot options are accepted."
+    die "kiosk reset reuses the saved browser, user, and level. Only reboot options and --disable-gnome-clickable / --no-disable-gnome-clickable are accepted."
   fi
 
-  if [[ "$ACTION" == "remove" && "$SETUP_OPTION_SEEN" == "true" ]]; then
+  if [[ "$ACTION" == "remove" && ( "$SETUP_OPTION_SEEN" == "true" || "$GNOME_CLICKABLE_OVERRIDE_SEEN" == "true" ) ]]; then
     die "kiosk remove accepts no setup options. Re-run first-time setup to choose a new browser."
   fi
 
@@ -358,7 +368,9 @@ load_saved_configuration() {
   KIOSK_USER="$saved_user"
   BROWSER_NAME="$saved_browser"
   LOCKDOWN_LEVEL="$saved_level"
-  DISABLE_GNOME_CLICKABLE="${saved_disable_gnome_clickable:-false}"
+  if [[ "$GNOME_CLICKABLE_OVERRIDE_SEEN" != "true" ]]; then
+    DISABLE_GNOME_CLICKABLE="${saved_disable_gnome_clickable:-false}"
+  fi
 }
 
 ensure_state_directory() {
@@ -704,8 +716,8 @@ _kiosk_completions() {
   esac
 
   case "$action" in
-    setup)  COMPREPLY=( $(compgen -W "--level --browser --user --disable-gnome-clickable --reboot --no-reboot -h --help" -- "$cur") ) ;;
-    reset)  COMPREPLY=( $(compgen -W "--reboot --no-reboot -h --help" -- "$cur") ) ;;
+    setup)  COMPREPLY=( $(compgen -W "--level --browser --user --disable-gnome-clickable --no-disable-gnome-clickable --reboot --no-reboot -h --help" -- "$cur") ) ;;
+    reset)  COMPREPLY=( $(compgen -W "--disable-gnome-clickable --no-disable-gnome-clickable --reboot --no-reboot -h --help" -- "$cur") ) ;;
     remove) COMPREPLY=( $(compgen -W "-h --help" -- "$cur") ) ;;
   esac
 }
@@ -1388,16 +1400,36 @@ EOF
   log "Installed the kiosk GNOME Shell theme at $KIOSK_USER_THEME_DIR"
 }
 
-configure_gnome_clickable_lockdown() {
-  [[ "$DISABLE_GNOME_CLICKABLE" == "true" ]] || return 0
+remove_user_theme_files() {
+  KIOSK_USER_THEME_DIR="$KIOSK_HOME/$USER_THEME_DIR_NAME/$USER_THEME_NAME"
+  if [[ -d "$KIOSK_USER_THEME_DIR" ]]; then
+    rm -rf -- "$KIOSK_USER_THEME_DIR"
+    log "Removed the kiosk GNOME Shell theme at $KIOSK_USER_THEME_DIR"
+  fi
+  KIOSK_USER_THEME_DIR=""
+  KIOSK_USER_THEME_CSS=""
+}
 
-  log "Hiding the clickable Activities button (--disable-gnome-clickable)..."
-  gsettings_schema_exists "$THEME_BASE_SCHEMA" \
-    || die "The $THEME_BASE_SCHEMA schema is unavailable. Install $USER_THEME_EXTENSION_PACKAGE and re-run setup."
-  enable_user_theme_extension
-  install_user_theme_files
-  set_required_gsettings_key "$THEME_BASE_SCHEMA" "$THEME_BASE_KEY" "'$USER_THEME_NAME'"
-  log "Activities button hidden. The change applies on the next GNOME Shell restart or login."
+configure_gnome_clickable_lockdown() {
+  if [[ "$DISABLE_GNOME_CLICKABLE" == "true" ]]; then
+    log "Hiding the clickable Activities button (--disable-gnome-clickable)..."
+    gsettings_schema_exists "$THEME_BASE_SCHEMA" \
+      || die "The $THEME_BASE_SCHEMA schema is unavailable. Install $USER_THEME_EXTENSION_PACKAGE and re-run setup."
+    enable_user_theme_extension
+    install_user_theme_files
+    set_required_gsettings_key "$THEME_BASE_SCHEMA" "$THEME_BASE_KEY" "'$USER_THEME_NAME'"
+    log "Activities button hidden. The change applies on the next GNOME Shell restart or login."
+  elif [[ "$GNOME_CLICKABLE_OVERRIDE_SEEN" == "true" ]]; then
+    log "Re-enabling the clickable Activities button (--no-disable-gnome-clickable)..."
+    if gsettings_schema_exists "$THEME_BASE_SCHEMA"; then
+      reset_gsettings_key "$THEME_BASE_SCHEMA" "$THEME_BASE_KEY" || true
+    fi
+    if user_theme_extension_enabled; then
+      "$GNOME_EXTENSIONS_BIN" disable "$USER_THEME_EXTENSION_UUID" 2>/dev/null || true
+    fi
+    remove_user_theme_files
+    log "Activities button restored. The change applies on the next GNOME Shell restart or login."
+  fi
 }
 
 apply_lockdown() {
@@ -1506,10 +1538,19 @@ run_reset() {
   configure_gdm_autologin
   apply_lockdown
   activate_autostart_stage
+  if [[ "$GNOME_CLICKABLE_OVERRIDE_SEEN" == "true" ]]; then
+    save_configuration
+    log "Saved updated --disable-gnome-clickable state."
+  fi
 
   log ""
   log "Kiosk reset completed successfully."
   log "The original autostart baseline and managed kiosk launcher are restored."
+  if [[ "$DISABLE_GNOME_CLICKABLE" == "true" ]]; then
+    log "Activities button: hidden (--disable-gnome-clickable)"
+  elif [[ "$GNOME_CLICKABLE_OVERRIDE_SEEN" == "true" ]]; then
+    log "Activities button: visible (--no-disable-gnome-clickable)"
+  fi
   log "Recovery: Ctrl+Alt+Shift+O, then run 'kiosk reset'"
   maybe_reboot
 }
