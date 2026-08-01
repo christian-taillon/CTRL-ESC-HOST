@@ -472,6 +472,7 @@ install_dependencies() {
   local packages=()
 
   command -v thunderbird &>/dev/null || packages+=(thunderbird)
+  command -v curl &>/dev/null || packages+=(curl)
   command -v xdg-mime &>/dev/null || packages+=(xdg-utils)
   command -v gnome-terminal &>/dev/null || packages+=(gnome-terminal)
   command -v mousetweaks &>/dev/null || packages+=(mousetweaks)
@@ -501,6 +502,8 @@ install_dependencies() {
   esac
 
   if [[ ${#packages[@]} -gt 0 ]]; then
+    log "Refreshing APT package metadata..."
+    run_root apt-get update
     log "Installing required packages: ${packages[*]}"
     run_root apt-get install -y "${packages[@]}"
   fi

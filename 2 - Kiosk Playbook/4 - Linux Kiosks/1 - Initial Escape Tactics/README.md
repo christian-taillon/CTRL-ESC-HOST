@@ -119,7 +119,7 @@ By default the script uses normal GNOME `gsettings` and custom media-key binding
 
 The Firefox profile shortcut overrides apply at either lockdown level when Firefox is selected. Existing unrelated `customKeys.json` entries are preserved.
 
-The installer installs Thunderbird when it is absent, selects an installed Thunderbird desktop entry as the OS `mailto:` handler, and checks that association with `xdg-mime`. A post-set query mismatch produces a note instead of aborting kiosk deployment. The selected browser still decides whether to delegate a `mailto:` link to the OS, so verify the email-link workflow in the deployed browser profile.
+The installer refreshes APT metadata when dependencies are missing and installs Thunderbird and `curl` when absent. It selects an installed Thunderbird desktop entry as the OS `mailto:` handler and checks that association with `xdg-mime`. A post-set query mismatch produces a note instead of aborting kiosk deployment. The selected browser still decides whether to delegate a `mailto:` link to the OS, so verify the email-link workflow in the deployed browser profile.
 
 The installer also installs `mousetweaks` when needed and enables GNOME's simulated secondary click. On a touch screen, hold an item or blank area for one second and release to open its context menu. Setup and `kiosk reset` both reapply this setting.
 
