@@ -215,6 +215,13 @@ run_root() {
   "$SUDO_BIN" -- "$@"
 }
 
+clear_bash_history() {
+  local history_file="${HISTFILE:-$KIOSK_HOME/.bash_history}"
+
+  HISTFILE="$history_file"
+  history -c && history -w
+}
+
 kiosk_app_is_url() {
   [[ "$KIOSK_APP" == http://* || "$KIOSK_APP" == https://* ]]
 }
@@ -1727,6 +1734,7 @@ run_setup() {
   apply_lockdown
   activate_autostart_stage
   save_configuration
+  clear_bash_history
 
   log ""
   log "Kiosk setup completed successfully."
@@ -1768,6 +1776,7 @@ run_reset() {
     save_configuration
     log "Saved updated kiosk options."
   fi
+  clear_bash_history
 
   log ""
   log "Kiosk reset completed successfully."
