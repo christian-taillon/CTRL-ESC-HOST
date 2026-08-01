@@ -29,6 +29,17 @@ The reset restores the original kiosk files and autostart configuration, reappli
 
 Run only one reset at a time on each device. If the recovery shortcut does not work, contact the technical lead rather than changing system files.
 
+## Update the Kiosk Page
+
+To install an updated kiosk page from GitHub, open the recovery terminal and change to the cloned repository's `2 - Kiosk Playbook/4 - Linux Kiosks/1 - Initial Escape Tactics` directory. Then run:
+
+```bash
+git pull
+./prepare-kiosk.sh reset --reboot
+```
+
+`kiosk reset --reboot` by itself uses the already-installed page. Running the updated repository script installs the new HTML before rebooting.
+
 ## Switch Browser
 
 `kiosk reset` always reuses the browser saved during first-time setup. To redeploy with a different browser, remove the saved kiosk configuration and run first-time setup with the new browser. Install the new browser first if it is not already present.
