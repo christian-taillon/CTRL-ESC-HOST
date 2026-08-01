@@ -55,6 +55,19 @@ KIOSK_USER="$($ID_BIN -un)"
 REBOOT_MODE="ask"
 REBOOT_OPTION_SEEN="false"
 SETUP_OPTION_SEEN="false"
+DISABLE_GNOME_CLICKABLE="false"
+
+USER_THEME_EXTENSION_UUID="user-theme@gnome-shell-extensions.gcampax.github.com"
+USER_THEME_EXTENSION_PACKAGE="gnome-shell-extension-user-theme"
+USER_THEME_NAME="ctrl-esc-host-kiosk"
+USER_THEME_DIR_NAME=".themes"
+USER_THEME_GNOME_SHELL_SUBDIR="gnome-shell"
+USER_THEME_CSS_NAME="gnome-shell.css"
+GNOME_EXTENSIONS_BIN="/usr/bin/gnome-extensions"
+THEME_BASE_SCHEMA="org.gnome.shell.extensions.user-theme"
+THEME_BASE_KEY="name"
+KIOSK_USER_THEME_DIR=""
+KIOSK_USER_THEME_CSS=""
 
 CURRENT_USER="$($ID_BIN -un)"
 KIOSK_HOME="$HOME"
@@ -139,6 +152,10 @@ First-run options:
   --browser firefox|chromium|chrome
                               Browser used for the kiosk (default: firefox)
   --user USER                 GDM autologin user (default: current user)
+  --disable-gnome-clickable  Also hide the clickable Activities button in the
+                              GNOME top bar (installs/enables the user-theme
+                              GNOME Shell extension and a small theme). Off by
+                              default while the approach is validated.
   --reboot                    Reboot automatically after success
   --no-reboot                 Do not reboot after success
   -h, --help                  Show this help
@@ -262,6 +279,11 @@ parse_arguments() {
       REBOOT_OPTION_SEEN="true"
       shift
       ;;
+    --disable-gnome-clickable)
+      DISABLE_GNOME_CLICKABLE="true"
+      SETUP_OPTION_SEEN="true"
+      shift
+      ;;
     -h | --help)
       print_usage
       exit 0
@@ -279,7 +301,7 @@ parse_arguments() {
   esac
 
   if [[ "$ACTION" == "reset" && "$SETUP_OPTION_SEEN" == "true" ]]; then
-    die "kiosk reset reuses the saved browser, user, and level. Only reboot options are accepted."
+    die "kiosk reset reuses the saved browser, user, level, and --disable-gnome-clickable state. Only reboot options are accepted."
   fi
 
   if [[ "$ACTION" == "remove" && "$SETUP_OPTION_SEEN" == "true" ]]; then
@@ -308,6 +330,7 @@ load_saved_configuration() {
   local saved_user=""
   local saved_browser=""
   local saved_level=""
+  local saved_disable_gnome_clickable=""
 
   run_root test -f "$CONFIG_FILE" || die "No completed kiosk setup was found. Run prepare-kiosk.sh first."
   configuration="$(run_root cat "$CONFIG_FILE")" || die "Unable to read the saved kiosk configuration."
@@ -316,6 +339,7 @@ load_saved_configuration() {
     KIOSK_USER) saved_user="$value" ;;
     BROWSER_NAME) saved_browser="$value" ;;
     LOCKDOWN_LEVEL) saved_level="$value" ;;
+    DISABLE_GNOME_CLICKABLE) saved_disable_gnome_clickable="$value" ;;
     *) die "Unexpected key in saved kiosk configuration: $key" ;;
     esac
   done <<<"$configuration"
@@ -326,10 +350,15 @@ load_saved_configuration() {
   *) die "Saved browser is invalid." ;;
   esac
   [[ "$saved_level" == "1" || "$saved_level" == "2" ]] || die "Saved lockdown level is invalid."
+  case "${saved_disable_gnome_clickable:-}" in
+  "" | true | false) ;;
+  *) die "Saved --disable-gnome-clickable value is invalid." ;;
+  esac
 
   KIOSK_USER="$saved_user"
   BROWSER_NAME="$saved_browser"
   LOCKDOWN_LEVEL="$saved_level"
+  DISABLE_GNOME_CLICKABLE="${saved_disable_gnome_clickable:-false}"
 }
 
 ensure_state_directory() {
@@ -342,6 +371,7 @@ save_configuration() {
     printf 'KIOSK_USER=%s\n' "$KIOSK_USER"
     printf 'BROWSER_NAME=%s\n' "$BROWSER_NAME"
     printf 'LOCKDOWN_LEVEL=%s\n' "$LOCKDOWN_LEVEL"
+    printf 'DISABLE_GNOME_CLICKABLE=%s\n' "$DISABLE_GNOME_CLICKABLE"
   } | write_root_file_atomic "$CONFIG_FILE" 600
 }
 
@@ -405,6 +435,20 @@ install_dependencies() {
     log "Installing required packages: ${packages[*]}"
     run_root apt-get install -y "${packages[@]}"
   fi
+}
+
+ensure_user_theme_extension() {
+  [[ "$DISABLE_GNOME_CLICKABLE" == "true" ]] || return 0
+
+  command -v "$GNOME_EXTENSIONS_BIN" &>/dev/null || die "$GNOME_EXTENSIONS_BIN is required for --disable-gnome-clickable (install the gnome-shell package)."
+
+  if ! "$GNOME_EXTENSIONS_BIN" list --system 2>/dev/null | grep -Fxq "$USER_THEME_EXTENSION_UUID"; then
+    log "Installing the user-theme GNOME Shell extension package for --disable-gnome-clickable..."
+    run_root apt-get install -y "$USER_THEME_EXTENSION_PACKAGE"
+  fi
+
+  "$GNOME_EXTENSIONS_BIN" list --system 2>/dev/null | grep -Fxq "$USER_THEME_EXTENSION_UUID" \
+    || die "The user-theme GNOME Shell extension is unavailable after installing $USER_THEME_EXTENSION_PACKAGE."
 }
 
 resolve_browser() {
@@ -660,7 +704,7 @@ _kiosk_completions() {
   esac
 
   case "$action" in
-    setup)  COMPREPLY=( $(compgen -W "--level --browser --user --reboot --no-reboot -h --help" -- "$cur") ) ;;
+    setup)  COMPREPLY=( $(compgen -W "--level --browser --user --disable-gnome-clickable --reboot --no-reboot -h --help" -- "$cur") ) ;;
     reset)  COMPREPLY=( $(compgen -W "--reboot --no-reboot -h --help" -- "$cur") ) ;;
     remove) COMPREPLY=( $(compgen -W "-h --help" -- "$cur") ) ;;
   esac
@@ -1301,12 +1345,68 @@ apply_level_two_lockdown() {
     terminal
 }
 
+user_theme_extension_enabled() {
+  local enabled_list
+  enabled_list="$(gsettings get org.gnome.shell enabled-extensions 2>/dev/null || true)"
+  [[ "$enabled_list" == *"'$USER_THEME_EXTENSION_UUID'"* ]]
+}
+
+enable_user_theme_extension() {
+  local initial_state
+  initial_state="$(gsettings get org.gnome.shell disable-user-extensions 2>/dev/null || true)"
+  if [[ "$initial_state" == "true" ]]; then
+    set_required_gsettings_key "org.gnome.shell" disable-user-extensions "false"
+  fi
+
+  if ! user_theme_extension_enabled; then
+    "$GNOME_EXTENSIONS_BIN" enable "$USER_THEME_EXTENSION_UUID" \
+      || die "Unable to enable the user-theme GNOME Shell extension for --disable-gnome-clickable."
+  fi
+
+  user_theme_extension_enabled \
+    || die "The user-theme extension was not enabled after 'gnome-extensions enable'. Log out and back in, then rerun setup."
+}
+
+install_user_theme_files() {
+  KIOSK_USER_THEME_DIR="$KIOSK_HOME/$USER_THEME_DIR_NAME/$USER_THEME_NAME"
+  KIOSK_USER_THEME_CSS="$KIOSK_USER_THEME_DIR/$USER_THEME_GNOME_SHELL_SUBDIR/$USER_THEME_CSS_NAME"
+
+  mkdir -p "$KIOSK_USER_THEME_DIR/$USER_THEME_GNOME_SHELL_SUBDIR"
+
+  cat >"$KIOSK_USER_THEME_CSS" <<'EOF'
+/* CTRL+ESC+HOST kiosk theme: hide the clickable Activities button. */
+#panelActivities {
+  opacity: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+}
+EOF
+  chmod 644 "$KIOSK_USER_THEME_CSS"
+  log "Installed the kiosk GNOME Shell theme at $KIOSK_USER_THEME_DIR"
+}
+
+configure_gnome_clickable_lockdown() {
+  [[ "$DISABLE_GNOME_CLICKABLE" == "true" ]] || return 0
+
+  log "Hiding the clickable Activities button (--disable-gnome-clickable)..."
+  gsettings_schema_exists "$THEME_BASE_SCHEMA" \
+    || die "The $THEME_BASE_SCHEMA schema is unavailable. Install $USER_THEME_EXTENSION_PACKAGE and re-run setup."
+  enable_user_theme_extension
+  install_user_theme_files
+  set_required_gsettings_key "$THEME_BASE_SCHEMA" "$THEME_BASE_KEY" "'$USER_THEME_NAME'"
+  log "Activities button hidden. The change applies on the next GNOME Shell restart or login."
+}
+
 apply_lockdown() {
   capture_custom_bindings_once
   apply_level_one_lockdown
   if [[ "$LOCKDOWN_LEVEL" == "2" ]]; then
     apply_level_two_lockdown
   fi
+  configure_gnome_clickable_lockdown
   apply_managed_custom_bindings
   log "Instructor recovery terminal: Ctrl+Alt+Shift+O"
 }
@@ -1357,6 +1457,7 @@ run_setup() {
   backup_autostart_once
   capture_custom_bindings_once
   install_dependencies
+  ensure_user_theme_extension
   resolve_browser
   resolve_firefox_profile
   install_kiosk_command
@@ -1376,6 +1477,9 @@ run_setup() {
   log "Kiosk setup completed successfully."
   log "Lockdown level: $LOCKDOWN_LEVEL"
   log "Browser: $BROWSER_NAME"
+  if [[ "$DISABLE_GNOME_CLICKABLE" == "true" ]]; then
+    log "Activities button: hidden (--disable-gnome-clickable)"
+  fi
   log "Recovery: Ctrl+Alt+Shift+O, then run 'kiosk reset'"
   maybe_reboot
 }
@@ -1388,6 +1492,7 @@ run_reset() {
   set_user_paths
   locate_source_html
   install_dependencies
+  ensure_user_theme_extension
   resolve_browser
   resolve_firefox_profile
   install_kiosk_command

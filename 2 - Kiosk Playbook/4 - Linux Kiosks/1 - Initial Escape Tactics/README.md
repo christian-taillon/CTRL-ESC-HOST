@@ -37,6 +37,7 @@ Defaults:
 - Lockdown: Level 2
 - Autologin account: Current user
 - Reboot: Ask after successful setup when stdin is an interactive terminal; otherwise skip reboot
+- Activities button: Not hidden (see `--disable-gnome-clickable`)
 
 For unattended deployment to the 12 workshop devices:
 
@@ -45,6 +46,14 @@ For unattended deployment to the 12 workshop devices:
 ```
 
 Use `--no-reboot` to finish configuration without rebooting. Google Chrome must already be installed if selected; Firefox and Chromium are installed through `apt-get` when missing.
+
+To also hide the clickable Activities button in the GNOME top bar (useful if a participant reaches the desktop), pass `--disable-gnome-clickable`:
+
+```bash
+./prepare-kiosk.sh --level 2 --browser firefox --user kiosk --disable-gnome-clickable --reboot
+```
+
+The flag is optional and off by default while the approach is validated across the workshop images. When set, the installer installs and enables the `user-theme` GNOME Shell extension (`gnome-shell-extension-user-theme`) and drops a small user theme under `~/.themes/ctrl-esc-host-kiosk/gnome-shell/gnome-shell.css` that hides the `#panelActivities` button. The change takes effect on the next GNOME Shell restart or login. `kiosk reset` reuses the saved `--disable-gnome-clickable` state; pass the flag again on first-time setup to change it.
 
 Firefox is resolved from the system `PATH`. On current Ubuntu Desktop installations this normally selects `/snap/bin/firefox`; the installer no longer silently prefers a separate Firefox under `~/.local/opt`. It resolves Firefox's declared default profile, atomically merges only the close-tab, close-window, and quit overrides into that profile's `customKeys.json`, and launches the kiosk with that same profile. Refresh the Firefox Snap before workshop deployment and validate the shortcut and email-link workflows on each image.
 
@@ -78,7 +87,7 @@ Level 2 includes Level 1 and blocks common kiosk escape navigation:
 - `Ctrl+W`, `Ctrl+Shift+W`, `Ctrl+T`, `Ctrl+Shift+T`, `Ctrl+N`, and `Ctrl+Shift+N`
 - `Ctrl+L`, `F11`, `F12`, and common Chromium developer-tools shortcuts
 
-The script uses normal GNOME `gsettings` and custom media-key bindings. It does not install a GNOME Shell extension or modify the top bar. The browser's full-screen kiosk mode covers the desktop UI.
+By default the script uses normal GNOME `gsettings` and custom media-key bindings and does not install a GNOME Shell extension or modify the top bar; the browser's full-screen kiosk mode covers the desktop UI. The optional `--disable-gnome-clickable` flag is the one exception: it enables the `user-theme` extension and installs a minimal user theme to hide the clickable Activities button.
 
 The Firefox profile shortcut overrides apply at either lockdown level when Firefox is selected. Existing unrelated `customKeys.json` entries are preserved.
 
@@ -172,4 +181,4 @@ It first verifies that the active systemd display-manager service and Debian dis
 
 ## Scope
 
-The lockdown targets common core GNOME and browser navigation used to escape a full-screen workshop kiosk. It does not manage GNOME Shell extension shortcuts or disable Linux virtual-terminal switching such as `Ctrl+Alt+F3`, firmware keys, or physical access recovery.
+The lockdown targets common core GNOME and browser navigation used to escape a full-screen workshop kiosk. It does not manage GNOME Shell extension shortcuts or disable Linux virtual-terminal switching such as `Ctrl+Alt+F3`, firmware keys, or physical access recovery. The optional `--disable-gnome-clickable` flag only hides the top-bar Activities button via the `user-theme` extension; it does not remove other top-bar indicators or block the overview from other entry points.

@@ -40,6 +40,16 @@ kiosk remove
 
 `kiosk remove` clears the saved configuration and the managed autostart entry. GDM autologin and GNOME lockdown remain until the next setup overwrites them.
 
+## Optional: Hide the Activities Button
+
+The `--disable-gnome-clickable` flag is **optional and not part of the standard workshop kiosk setup.** It is off by default while the approach is validated. The standard lockdown already disables the Activities keyboard shortcut and hot corner; this flag additionally hides the clickable Activities button in the GNOME top bar, which only matters if a participant reaches the desktop.
+
+If you choose to enable it on a device, pass it during first-time setup. It installs and enables the `user-theme` GNOME Shell extension and a small user theme, and the change takes effect on the next login. `kiosk reset` reuses whatever state was saved at setup.
+
+```bash
+./prepare-kiosk.sh --level 2 --browser firefox --user kiosk --disable-gnome-clickable --reboot
+```
+
 ## Workshop Links
 
 - [Linux kiosk playbook](../README.md)
