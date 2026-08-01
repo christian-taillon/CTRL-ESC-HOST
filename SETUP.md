@@ -58,6 +58,7 @@ After reboot, fill in the cheatsheet table per device:
 |---|---|
 | GDM auto-logs in as `kiosk` | yes |
 | Kiosk opens full screen ~5s after login | yes |
+| Screen remains on and unlocked while idle | yes |
 | Super → Activities | blocked |
 | `Alt+F2`, `Alt+F4`, `Alt+Tab` | blocked |
 | `Ctrl+W`, `Ctrl+Shift+W`, `Ctrl+Q` in Firefox | no effect |
@@ -79,6 +80,11 @@ ls -l ~/.config/autostart/skyline-kiosk.desktop
 sudo cat "/var/lib/ctrl-esc-host-kiosk/users/$(id -u)/config"
 sudo grep -E '^(AutomaticLoginEnable|AutomaticLogin)=' /etc/gdm3/custom.conf
 gsettings get org.gnome.mutter overlay-key   # -> ''
+gsettings get org.gnome.desktop.session idle-delay                            # -> uint32 0
+gsettings get org.gnome.desktop.screensaver lock-enabled                       # -> false
+gsettings get org.gnome.desktop.lockdown disable-lock-screen                   # -> true
+gsettings get org.gnome.settings-daemon.plugins.power sleep-inactive-ac-type   # -> 'nothing'
+gsettings get org.gnome.settings-daemon.plugins.power sleep-inactive-battery-type # -> 'nothing'
 
 # Use the profile path printed by prepare-kiosk.sh.
 FIREFOX_PROFILE='/path/to/the/resolved/profile'
