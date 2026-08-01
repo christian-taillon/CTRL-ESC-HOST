@@ -31,22 +31,32 @@ Run only one reset at a time on each device. If the recovery shortcut does not w
 
 ## Update the Kiosk Page
 
-To install an updated kiosk page from GitHub, open the recovery terminal and change to the cloned repository's `2 - Kiosk Playbook/4 - Linux Kiosks/1 - Initial Escape Tactics` directory. Then run:
+To install an updated local kiosk page from GitHub, open the recovery terminal and change to the cloned repository's `2 - Kiosk Playbook/4 - Linux Kiosks/1 - Initial Escape Tactics` directory. Then run:
 
 ```bash
 git pull
 ./prepare-kiosk.sh reset --reboot
 ```
 
-`kiosk reset --reboot` by itself uses the already-installed page. Running the updated repository script installs the new HTML before rebooting.
+`kiosk reset --reboot` by itself uses the already-installed page. Running the updated repository script installs the saved app's new HTML before rebooting. URL apps always load their remote content directly.
 
-## Switch Browser
+## Choose the Kiosk App
 
-`kiosk reset` always reuses the browser saved during first-time setup. To redeploy with a different browser, remove the saved kiosk configuration and run first-time setup with the new browser. Install the new browser first if it is not already present.
+Omit `--app` to use `airline_kiosk.html`, or select the alternate local app during first-time setup:
+
+```bash
+./prepare-kiosk.sh --reboot --app airport-coffee-kiosk_touchscreen.html
+```
+
+An `http://` or `https://` URL is also accepted, but a local file is preferred when the workshop must remain usable without network access. The selected app is saved per device and reused by `kiosk reset`.
+
+## Switch App or Browser
+
+`kiosk reset` always reuses the app and browser saved during first-time setup. To redeploy with a different app or browser, remove the saved kiosk configuration and run first-time setup with the new choices. Install the new browser first if it is not already present.
 
 ```bash
 kiosk remove
-./prepare-kiosk.sh --level 2 --browser chrome --user kiosk --reboot
+./prepare-kiosk.sh --app airport-coffee-kiosk_touchscreen.html --browser chrome --user kiosk --reboot
 ```
 
 `kiosk remove` clears the saved configuration and the managed autostart entry. GDM autologin and GNOME lockdown remain until the next setup overwrites them.

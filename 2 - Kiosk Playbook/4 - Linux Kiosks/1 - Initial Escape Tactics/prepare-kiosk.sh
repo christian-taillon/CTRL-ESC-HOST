@@ -38,12 +38,13 @@ SCRIPT_DIR="$(cd -- "$(/usr/bin/dirname -- "$SCRIPT_PATH")" && pwd)"
 
 INSTALL_ROOT="ctrl-esc-host-kiosk"
 INSTALL_SCRIPT="/usr/local/libexec/$INSTALL_ROOT/prepare-kiosk.sh"
-INSTALL_HTML="/usr/local/share/$INSTALL_ROOT/airline_kiosk.html"
+INSTALL_APP_DIR="/usr/local/share/$INSTALL_ROOT"
+INSTALL_HTML=""
 INSTALL_COMMAND="/usr/local/bin/kiosk"
 INSTALL_COMPLETION="/usr/share/bash-completion/completions/kiosk"
 
 DESKTOP_FILE_NAME="skyline-kiosk.desktop"
-HTML_FILE_NAME="airline_kiosk.html"
+DEFAULT_KIOSK_APP="airline_kiosk.html"
 SETTINGS_DESKTOP_FILE_NAME="org.gnome.Settings.desktop"
 SETTINGS_DESKTOP_MASK_MARKER="X-CTRL-ESC-HOST-Managed=true"
 RECOVERY_ACCELERATOR="<Control><Alt><Shift>o"
@@ -55,6 +56,7 @@ ACTION="setup"
 LOCKDOWN_LEVEL="2"
 BROWSER_NAME="firefox"
 KIOSK_USER="$($ID_BIN -un)"
+KIOSK_APP="$DEFAULT_KIOSK_APP"
 REBOOT_MODE="ask"
 REBOOT_OPTION_SEEN="false"
 SETUP_OPTION_SEEN="false"
@@ -156,6 +158,8 @@ First-run options:
   --level 1|2                 Lockdown level (default: 2)
   --browser firefox|chromium|chrome
                               Browser used for the kiosk (default: firefox)
+  --app FILE|URL              Local HTML filename beside the script or an
+                              http(s) URL (default: airline_kiosk.html)
   --user USER                 GDM autologin user (default: current user)
   --disable-gnome-clickable  Hide the clickable Activities button and the
                               Quick Settings gear (installs/enables the
@@ -177,9 +181,9 @@ The instructor recovery shortcut is Ctrl+Alt+Shift+O. It opens a terminal so
 the instructor can run: kiosk reset
 
 kiosk remove clears the saved kiosk configuration and the managed autostart
-entry so the device can be redeployed with a different browser via first-time
-setup. GDM autologin and GNOME lockdown remain until the next setup overwrites
-them; install the new browser first, then run:
+entry so the device can be redeployed with a different app or browser via
+first-time setup. GDM autologin and GNOME lockdown remain until the next setup
+overwrites them; install the new browser first, then run:
 
   ./prepare-kiosk.sh --level 2 --browser chrome --user kiosk --reboot
 
@@ -203,6 +207,29 @@ die() {
 
 run_root() {
   "$SUDO_BIN" -- "$@"
+}
+
+kiosk_app_is_url() {
+  [[ "$KIOSK_APP" == http://* || "$KIOSK_APP" == https://* ]]
+}
+
+validate_kiosk_app() {
+  local authority
+
+  case "$KIOSK_APP" in
+  *$'\n'* | *$'\r'* | *$'\t'* | *" "*)
+    die "--app must not contain whitespace."
+    ;;
+  esac
+
+  if kiosk_app_is_url; then
+    authority="${KIOSK_APP#*://}"
+    authority="${authority%%[/?#]*}"
+    [[ -n "$authority" ]] || die "--app URL must include a host."
+  else
+    [[ "$KIOSK_APP" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*\.html$ ]] \
+      || die "--app must be an HTML filename beside the script or an http(s) URL."
+  fi
 }
 
 write_root_file_atomic() {
@@ -244,7 +271,11 @@ set_user_paths() {
   CUSTOM_BINDINGS_BACKUP="$STATE_DIR/custom-keybindings.original"
   AUTOSTART_DIR="$KIOSK_HOME/.config/autostart"
   KIOSK_DIR="$KIOSK_HOME/Public"
-  KIOSK_HTML="$KIOSK_DIR/$HTML_FILE_NAME"
+  if kiosk_app_is_url; then
+    KIOSK_HTML=""
+  else
+    KIOSK_HTML="$KIOSK_DIR/$KIOSK_APP"
+  fi
   KIOSK_WRAPPER="$KIOSK_DIR/start-kiosk.sh"
   SETTINGS_DESKTOP_MASK="$KIOSK_HOME/.local/share/applications/$SETTINGS_DESKTOP_FILE_NAME"
 }
@@ -268,6 +299,12 @@ parse_arguments() {
     --browser)
       [[ -n "${2:-}" ]] || die "--browser requires firefox, chromium, or chrome."
       BROWSER_NAME="$2"
+      SETUP_OPTION_SEEN="true"
+      shift 2
+      ;;
+    --app)
+      [[ -n "${2:-}" ]] || die "--app requires an HTML filename or http(s) URL."
+      KIOSK_APP="$2"
       SETUP_OPTION_SEEN="true"
       shift 2
       ;;
@@ -314,27 +351,35 @@ parse_arguments() {
   firefox | chromium | chrome) ;;
   *) die "--browser must be firefox, chromium, or chrome." ;;
   esac
+  validate_kiosk_app
 
   if [[ "$ACTION" == "reset" && "$SETUP_OPTION_SEEN" == "true" ]]; then
-    die "kiosk reset reuses the saved browser, user, and level. Only reboot options and --disable-gnome-clickable / --no-disable-gnome-clickable are accepted."
+    die "kiosk reset reuses the saved app, browser, user, and level. Only reboot options and --disable-gnome-clickable / --no-disable-gnome-clickable are accepted."
   fi
 
   if [[ "$ACTION" == "remove" && ( "$SETUP_OPTION_SEEN" == "true" || "$GNOME_CLICKABLE_OVERRIDE_SEEN" == "true" ) ]]; then
-    die "kiosk remove accepts no setup options. Re-run first-time setup to choose a new browser."
+    die "kiosk remove accepts no setup options. Re-run first-time setup to choose a new app or browser."
   fi
 
   if [[ "$ACTION" == "remove" && "$REBOOT_MODE" == "yes" ]]; then
-    die "kiosk remove does not reboot. Run first-time setup with --reboot after switching browsers."
+    die "kiosk remove does not reboot. Run first-time setup with --reboot after choosing the new app or browser."
   fi
 }
 
 locate_source_html() {
-  if [[ -f "$SCRIPT_DIR/$HTML_FILE_NAME" ]]; then
-    SOURCE_HTML="$SCRIPT_DIR/$HTML_FILE_NAME"
+  SOURCE_HTML=""
+  INSTALL_HTML=""
+  if kiosk_app_is_url; then
+    return 0
+  fi
+
+  INSTALL_HTML="$INSTALL_APP_DIR/$KIOSK_APP"
+  if [[ -f "$SCRIPT_DIR/$KIOSK_APP" ]]; then
+    SOURCE_HTML="$SCRIPT_DIR/$KIOSK_APP"
   elif [[ -f "$INSTALL_HTML" ]]; then
     SOURCE_HTML="$INSTALL_HTML"
   else
-    die "Unable to locate $HTML_FILE_NAME beside the script or at $INSTALL_HTML."
+    die "Unable to locate $KIOSK_APP beside the script or at $INSTALL_HTML."
   fi
 }
 
@@ -345,6 +390,7 @@ load_saved_configuration() {
   local saved_user=""
   local saved_browser=""
   local saved_level=""
+  local saved_app="$DEFAULT_KIOSK_APP"
   local saved_disable_gnome_clickable=""
 
   run_root test -f "$CONFIG_FILE" || die "No completed kiosk setup was found. Run prepare-kiosk.sh first."
@@ -354,6 +400,7 @@ load_saved_configuration() {
     KIOSK_USER) saved_user="$value" ;;
     BROWSER_NAME) saved_browser="$value" ;;
     LOCKDOWN_LEVEL) saved_level="$value" ;;
+    KIOSK_APP) saved_app="$value" ;;
     DISABLE_GNOME_CLICKABLE) saved_disable_gnome_clickable="$value" ;;
     *) die "Unexpected key in saved kiosk configuration: $key" ;;
     esac
@@ -365,6 +412,8 @@ load_saved_configuration() {
   *) die "Saved browser is invalid." ;;
   esac
   [[ "$saved_level" == "1" || "$saved_level" == "2" ]] || die "Saved lockdown level is invalid."
+  KIOSK_APP="$saved_app"
+  validate_kiosk_app
   case "${saved_disable_gnome_clickable:-}" in
   "" | true | false) ;;
   *) die "Saved --disable-gnome-clickable value is invalid." ;;
@@ -388,6 +437,7 @@ save_configuration() {
     printf 'KIOSK_USER=%s\n' "$KIOSK_USER"
     printf 'BROWSER_NAME=%s\n' "$BROWSER_NAME"
     printf 'LOCKDOWN_LEVEL=%s\n' "$LOCKDOWN_LEVEL"
+    printf 'KIOSK_APP=%s\n' "$KIOSK_APP"
     printf 'DISABLE_GNOME_CLICKABLE=%s\n' "$DISABLE_GNOME_CLICKABLE"
   } | write_root_file_atomic "$CONFIG_FILE" 600
 }
@@ -664,12 +714,12 @@ PY
 
 install_kiosk_command() {
   log "Installing the kiosk command and runtime assets..."
-  run_root install -d -m 755 "${INSTALL_SCRIPT%/*}" "${INSTALL_HTML%/*}"
+  run_root install -d -m 755 "${INSTALL_SCRIPT%/*}" "$INSTALL_APP_DIR"
 
   if [[ "$SCRIPT_PATH" != "$INSTALL_SCRIPT" ]]; then
     run_root install -m 755 "$SCRIPT_PATH" "$INSTALL_SCRIPT"
   fi
-  if [[ "$SOURCE_HTML" != "$INSTALL_HTML" ]]; then
+  if [[ -n "$SOURCE_HTML" && "$SOURCE_HTML" != "$INSTALL_HTML" ]]; then
     run_root install -m 644 "$SOURCE_HTML" "$INSTALL_HTML"
   fi
 
@@ -723,11 +773,12 @@ _kiosk_completions() {
   case "$prev" in
     --level)   COMPREPLY=( $(compgen -W "1 2" -- "$cur") ); return 0 ;;
     --browser) COMPREPLY=( $(compgen -W "firefox chromium chrome" -- "$cur") ); return 0 ;;
+    --app)     COMPREPLY=( $(compgen -f -X '!*.html' -- "$cur") ); return 0 ;;
     --user)    COMPREPLY=( $(compgen -W "$(/usr/bin/getent passwd | cut -d: -f1)" -- "$cur") ); return 0 ;;
   esac
 
   case "$action" in
-    setup)  COMPREPLY=( $(compgen -W "--level --browser --user --disable-gnome-clickable --no-disable-gnome-clickable --reboot --no-reboot -h --help" -- "$cur") ) ;;
+    setup)  COMPREPLY=( $(compgen -W "--level --browser --app --user --disable-gnome-clickable --no-disable-gnome-clickable --reboot --no-reboot -h --help" -- "$cur") ) ;;
     reset)  COMPREPLY=( $(compgen -W "--disable-gnome-clickable --no-disable-gnome-clickable --reboot --no-reboot -h --help" -- "$cur") ) ;;
     remove) COMPREPLY=( $(compgen -W "-h --help" -- "$cur") ) ;;
   esac
@@ -843,23 +894,29 @@ activate_autostart_stage() {
 generate_kiosk_files() {
   local target_autostart="$1"
   local browser_command
+  local kiosk_target
   local -a browser_args
 
   mkdir -p "$KIOSK_DIR" "$target_autostart"
-  [[ ! -d "$KIOSK_HTML" ]] || die "$KIOSK_HTML is a directory and cannot be replaced."
   [[ ! -d "$KIOSK_WRAPPER" ]] || die "$KIOSK_WRAPPER is a directory and cannot be replaced."
   [[ ! -d "$target_autostart/$DESKTOP_FILE_NAME" ]] || die "$target_autostart/$DESKTOP_FILE_NAME is a directory and cannot be replaced."
 
-  KIOSK_HTML_TEMP="$(/usr/bin/mktemp "$KIOSK_DIR/.airline-kiosk.XXXXXX")"
-  cp -- "$INSTALL_HTML" "$KIOSK_HTML_TEMP"
-  chmod 644 "$KIOSK_HTML_TEMP"
-  mv -f -- "$KIOSK_HTML_TEMP" "$KIOSK_HTML"
-  KIOSK_HTML_TEMP=""
+  if kiosk_app_is_url; then
+    kiosk_target="$KIOSK_APP"
+  else
+    [[ ! -d "$KIOSK_HTML" ]] || die "$KIOSK_HTML is a directory and cannot be replaced."
+    KIOSK_HTML_TEMP="$(/usr/bin/mktemp "$KIOSK_DIR/.kiosk-app.XXXXXX")"
+    cp -- "$INSTALL_HTML" "$KIOSK_HTML_TEMP"
+    chmod 644 "$KIOSK_HTML_TEMP"
+    mv -f -- "$KIOSK_HTML_TEMP" "$KIOSK_HTML"
+    KIOSK_HTML_TEMP=""
+    kiosk_target="$KIOSK_HTML"
+  fi
 
   case "$BROWSER_NAME" in
   firefox)
     [[ -n "$FIREFOX_PROFILE" ]] || die "The Firefox kiosk profile was not resolved."
-    browser_args=("$BROWSER_BIN" --profile "$FIREFOX_PROFILE" --kiosk "$KIOSK_HTML")
+    browser_args=("$BROWSER_BIN" --profile "$FIREFOX_PROFILE" --kiosk "$kiosk_target")
     ;;
   chromium | chrome)
     browser_args=(
@@ -870,7 +927,7 @@ generate_kiosk_files() {
       --enable-features=OverlayScrollbar
       --start-maximized
       --kiosk
-      "$KIOSK_HTML"
+      "$kiosk_target"
     )
     ;;
   esac
@@ -1643,6 +1700,7 @@ run_setup() {
   log "Kiosk setup completed successfully."
   log "Lockdown level: $LOCKDOWN_LEVEL"
   log "Browser: $BROWSER_NAME"
+  log "App: $KIOSK_APP"
   if [[ "$DISABLE_GNOME_CLICKABLE" == "true" ]]; then
     log "Activities button and Settings gear: hidden (--disable-gnome-clickable)"
   fi
@@ -1652,7 +1710,6 @@ run_setup() {
 
 run_reset() {
   set_user_paths
-  locate_source_html
   preflight
   load_saved_configuration
   set_user_paths
@@ -1680,6 +1737,7 @@ run_reset() {
   log ""
   log "Kiosk reset completed successfully."
   log "The original autostart baseline and managed kiosk launcher are restored."
+  log "App: $KIOSK_APP"
   if [[ "$DISABLE_GNOME_CLICKABLE" == "true" ]]; then
     log "Activities button and Settings gear: hidden (--disable-gnome-clickable)"
   elif [[ "$GNOME_CLICKABLE_OVERRIDE_SEEN" == "true" ]]; then
@@ -1710,7 +1768,7 @@ run_remove() {
 
   log ""
   log "Kiosk removal completed successfully."
-  log "Install the new browser first, then redeploy with first-time setup:"
+  log "Choose the new app or install the new browser, then run first-time setup:"
   log "  ./prepare-kiosk.sh --level 2 --browser chrome --user kiosk --reboot"
   log "GDM autologin and GNOME lockdown remain until the next setup overwrites them."
 }

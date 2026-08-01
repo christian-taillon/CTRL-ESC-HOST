@@ -2,8 +2,9 @@ This directory contains the Linux kiosk setup and the initial escape workshop re
 
 ## Resources
 
-- `prepare-kiosk.sh`: GNOME kiosk installer, workshop reset utility, and browser-switch helper.
+- `prepare-kiosk.sh`: GNOME kiosk installer, workshop reset utility, and app/browser-switch helper.
 - `airline_kiosk.html`: SkyLine Premium full-screen kiosk demo.
+- `airport-coffee-kiosk_touchscreen.html`: Alternate full-screen kiosk demo.
 - `INSTRUCTOR-CHEATSHEET.md`: Deployment, validation, recovery, and between-student reset commands.
 - `Protocol-Handler-Escape/`: Protocol-handler breakout walkthrough.
 
@@ -34,19 +35,38 @@ chmod +x prepare-kiosk.sh
 Defaults:
 
 - Browser: Firefox
+- App: `airline_kiosk.html`
 - Lockdown: Level 2
 - Autologin account: Current user
 - Reboot: Ask after successful setup when stdin is an interactive terminal; otherwise skip reboot
 - Activities button and Quick Settings gear: Not hidden (see `--disable-gnome-clickable`)
 - Screen blanking, automatic suspend, and lock screen: Disabled
 
-For unattended deployment to the 12 workshop devices:
+For unattended deployment to the three workshop devices:
 
 ```bash
 ./prepare-kiosk.sh --level 2 --browser firefox --user kiosk --reboot
 ```
 
 Use `--no-reboot` to finish configuration without rebooting. Google Chrome must already be installed if selected; Firefox and Chromium are installed through `apt-get` when missing.
+
+### Select the Kiosk App
+
+Use `--app` to give different devices different kiosk experiences while keeping every other default:
+
+```bash
+./prepare-kiosk.sh --reboot --app airport-coffee-kiosk_touchscreen.html
+```
+
+A local app must be a `.html` filename beside `prepare-kiosk.sh`. The installer copies it into the root-owned runtime assets and `~/Public`, then saves the selection for future `kiosk reset` runs. The default remains `airline_kiosk.html` when `--app` is omitted.
+
+An HTTP or HTTPS URL is also accepted and is launched directly:
+
+```bash
+./prepare-kiosk.sh --reboot --app https://kiosk.example.test/app
+```
+
+Prefer a local file for workshop devices when offline reliability and fixed content matter. A URL makes startup dependent on the network, DNS, TLS, and the continued availability of the remote content. Quote URLs that contain shell metacharacters such as `&`.
 
 To also hide the clickable Activities button and the GNOME Settings gear in Quick Settings (useful if a participant reaches the desktop), pass `--disable-gnome-clickable`:
 
@@ -132,7 +152,7 @@ The first setup captures `~/.config/autostart` before adding the kiosk launcher.
 1. Removes the current participant-modified `~/.config/autostart` directory.
 2. Restores the exact first-run baseline.
 3. Adds the managed `skyline-kiosk.desktop` entry back on top of the baseline.
-4. Refreshes the installed kiosk HTML and browser wrapper.
+4. Refreshes the installed local app, when selected, and the browser wrapper.
 5. Reapplies GDM autologin, disables idle blanking/suspend/locking, and restores the saved lockdown level and instructor shortcut.
 6. Asks whether to reboot when run from an interactive terminal. Without an interactive terminal it skips reboot unless `--reboot` is supplied.
 
@@ -149,16 +169,16 @@ Use `kiosk reset` when the instructor should be asked before rebooting. Use `kio
 
 Reset first builds a complete replacement in a sibling staging directory. It only swaps that directory into place after the baseline and managed launcher have been prepared successfully. The baseline is never replaced by reset. Therefore the resulting autostart directory is the original pre-kiosk content plus the managed `skyline-kiosk.desktop` required to start the kiosk after login.
 
-## Switching Browsers
+## Switching Apps or Browsers
 
-`kiosk reset` always reuses the browser saved during first-time setup. To redeploy with a different browser, use `kiosk remove` to clear the saved configuration and the managed autostart entry, then run first-time setup with the new browser:
+`kiosk reset` always reuses the app and browser saved during first-time setup. To redeploy with a different app or browser, use `kiosk remove` to clear the saved configuration and the managed autostart entry, then run first-time setup with the new selection:
 
 ```bash
 kiosk remove
-./prepare-kiosk.sh --level 2 --browser chrome --user kiosk --reboot
+./prepare-kiosk.sh --app airport-coffee-kiosk_touchscreen.html --browser chrome --user kiosk --reboot
 ```
 
-`kiosk remove` accepts no options and does not reboot. It removes only the saved configuration at `/var/lib/ctrl-esc-host-kiosk/users/<uid>/config`, the managed `skyline-kiosk.desktop` autostart entry, and the bash-completion file at `/usr/share/bash-completion/completions/kiosk`. GDM autologin and GNOME lockdown remain in place until the next setup overwrites them. Install the new browser first if it is not already present; the installer installs Firefox and Chromium through `apt-get` but requires Google Chrome to be pre-installed.
+`kiosk remove` accepts no options and does not reboot. It removes only the saved configuration at `/var/lib/ctrl-esc-host-kiosk/users/<uid>/config`, the managed `skyline-kiosk.desktop` autostart entry, and the bash-completion file at `/usr/share/bash-completion/completions/kiosk`. GDM autologin and GNOME lockdown remain in place until the next setup overwrites them. Install the new browser first if it is not already present; the installer installs Firefox and Chromium through `apt-get` but requires Google Chrome to be pre-installed. Previously copied local app files are not launched after a different app is selected.
 
 ## Installed Files
 
@@ -167,14 +187,14 @@ First-time setup installs:
 ```text
 /usr/local/bin/kiosk
 /usr/local/libexec/ctrl-esc-host-kiosk/prepare-kiosk.sh
-/usr/local/share/ctrl-esc-host-kiosk/airline_kiosk.html
+/usr/local/share/ctrl-esc-host-kiosk/<selected-local-app>.html
 /usr/share/bash-completion/completions/kiosk
-~/Public/airline_kiosk.html
+~/Public/<selected-local-app>.html
 ~/Public/start-kiosk.sh
 ~/.config/autostart/skyline-kiosk.desktop
 ```
 
-The installed `kiosk` command does not depend on the repository remaining on the device.
+The two HTML paths are present for local app selections; URL selections are written directly into `~/Public/start-kiosk.sh`. The installed `kiosk` command does not depend on the repository remaining on the device.
 
 ## Automatic Login
 
