@@ -39,6 +39,7 @@ Defaults:
 - Lockdown: Level 2
 - Autologin account: Current user
 - Reboot: Ask after successful setup when stdin is an interactive terminal; otherwise skip reboot
+- Touchscreen Nautilus console path: Disabled (see `--touchscreen`)
 - Activities button and Quick Settings gear: Not hidden (see `--disable-gnome-clickable`)
 - Screen blanking, automatic suspend, and lock screen: Disabled
 
@@ -67,6 +68,22 @@ An HTTP or HTTPS URL is also accepted and is launched directly:
 ```
 
 Prefer a local file for workshop devices when offline reliability and fixed content matter. A URL makes startup dependent on the network, DNS, TLS, and the continued availability of the remote content. Quote URLs that contain shell metacharacters such as `&`.
+
+### Enable the Touchscreen Terminal Path
+
+Use `--touchscreen` to install GNOME Console and enable Nautilus 50's touch-accessible terminal path:
+
+```bash
+./prepare-kiosk.sh --app airport-coffee-kiosk_touchscreen.html --touchscreen --reboot
+```
+
+The option is off by default and saved per device. To enable it on an already configured device, run the updated repository script:
+
+```bash
+./prepare-kiosk.sh reset --touchscreen --reboot
+```
+
+Future `kiosk reset` commands reuse the saved touchscreen mode.
 
 To also hide the clickable Activities button and the GNOME Settings gear in Quick Settings (useful if a participant reaches the desktop), pass `--disable-gnome-clickable`:
 
@@ -119,9 +136,9 @@ By default the script uses normal GNOME `gsettings` and custom media-key binding
 
 The Firefox profile shortcut overrides apply at either lockdown level when Firefox is selected. Existing unrelated `customKeys.json` entries are preserved.
 
-The installer refreshes APT metadata when dependencies are missing and installs Thunderbird, `curl`, GNOME Terminal, and GNOME Console when absent. It selects an installed Thunderbird desktop entry as the OS `mailto:` handler and checks that association with `xdg-mime`. A post-set query mismatch produces a note instead of aborting kiosk deployment. The selected browser still decides whether to delegate a `mailto:` link to the OS, so verify the email-link workflow in the deployed browser profile.
+The installer refreshes APT metadata when dependencies are missing and installs Thunderbird, `curl`, and GNOME Terminal when absent. With `--touchscreen`, it also installs GNOME Console. It selects an installed Thunderbird desktop entry as the OS `mailto:` handler and checks that association with `xdg-mime`. A post-set query mismatch produces a note instead of aborting kiosk deployment. The selected browser still decides whether to delegate a `mailto:` link to the OS, so verify the email-link workflow in the deployed browser profile.
 
-Ubuntu Resolute does not provide the retired `mousetweaks` package. Nautilus 50 handles touch context menus natively on file and folder items. Press and hold a folder, select **Open**, then select **Open in Console**. Nautilus requires the `gnome-console` package for that action, so the installer ensures it is present. Blank whitespace does not provide the same native long-press gesture.
+Ubuntu Resolute does not provide the retired `mousetweaks` package. Nautilus 50 handles touch context menus natively on file and folder items. On a device configured with `--touchscreen`, press and hold a folder, select **Open**, then select **Open in Console**. Nautilus requires the `gnome-console` package for that action, so touchscreen mode ensures it is present. Blank whitespace does not provide the same native long-press gesture.
 
 ## Instructor Recovery
 

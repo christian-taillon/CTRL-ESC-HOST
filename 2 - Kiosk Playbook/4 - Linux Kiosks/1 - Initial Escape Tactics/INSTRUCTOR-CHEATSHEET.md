@@ -12,7 +12,7 @@ Plug in the device and turn it on. No setup is needed.
 
 If the kiosk does not appear, wait briefly, then use the recovery steps below.
 
-For Firefox 147 or newer, manually verify that `Ctrl+W`, `Ctrl+Shift+W`, and `Ctrl+Q` do nothing. Then confirm that available controls or links can still open and use multiple tabs and popup windows, and that the kiosk Email link still launches the configured Thunderbird application. On touch screens, press and hold a folder in Nautilus and confirm that **Open → Open in Console** launches GNOME Console.
+For Firefox 147 or newer, manually verify that `Ctrl+W`, `Ctrl+Shift+W`, and `Ctrl+Q` do nothing. Then confirm that available controls or links can still open and use multiple tabs and popup windows, and that the kiosk Email link still launches the configured Thunderbird application. On devices configured with `--touchscreen`, press and hold a folder in Nautilus and confirm that **Open → Open in Console** launches GNOME Console.
 
 ## Reset Between Students
 
@@ -49,6 +49,14 @@ Omit `--app` to use `airline_kiosk.html`, or select the alternate local app duri
 ```
 
 An `http://` or `https://` URL is also accepted, but a local file is preferred when the workshop must remain usable without network access. The selected app is saved per device and reused by `kiosk reset`.
+
+## Enable Touchscreen Console Access
+
+During first-time setup, add `--touchscreen` to install GNOME Console for Nautilus's **Open → Open in Console** touch path. To enable and save it on an existing device, run from the updated repository:
+
+```bash
+./prepare-kiosk.sh reset --touchscreen --reboot
+```
 
 ## Switch App or Browser
 

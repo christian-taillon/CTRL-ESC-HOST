@@ -47,6 +47,7 @@ DESKTOP_FILE_NAME="skyline-kiosk.desktop"
 DEFAULT_KIOSK_APP="airline_kiosk.html"
 SETTINGS_DESKTOP_FILE_NAME="org.gnome.Settings.desktop"
 SETTINGS_DESKTOP_MASK_MARKER="X-CTRL-ESC-HOST-Managed=true"
+GNOME_CONSOLE_SERVICE="/usr/share/dbus-1/services/org.gnome.Console.service"
 RECOVERY_ACCELERATOR="<Control><Alt><Shift>o"
 CUSTOM_BINDING_SCHEMA="org.gnome.settings-daemon.plugins.media-keys"
 CUSTOM_BINDING_BASE="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings"
@@ -62,6 +63,8 @@ REBOOT_OPTION_SEEN="false"
 SETUP_OPTION_SEEN="false"
 DISABLE_GNOME_CLICKABLE="false"
 GNOME_CLICKABLE_OVERRIDE_SEEN="false"
+TOUCHSCREEN_MODE="false"
+TOUCHSCREEN_OPTION_SEEN="false"
 
 USER_THEME_EXTENSION_UUID="user-theme@gnome-shell-extensions.gcampax.github.com"
 USER_THEME_EXTENSION_PACKAGE="gnome-shell-extension-user-theme"
@@ -169,6 +172,9 @@ First-run options:
                               Restore the Activities button and Settings gear.
                               Accepted on setup or reset to toggle the saved
                               state.
+  --touchscreen               Install GNOME Console for Nautilus's touch
+                              Open in Console path. Accepted on setup or reset
+                              and saved for future resets.
   --reboot                    Reboot automatically after success
   --no-reboot                 Do not reboot after success
   -h, --help                  Show this help
@@ -336,6 +342,11 @@ parse_arguments() {
       GNOME_CLICKABLE_OVERRIDE_SEEN="true"
       shift
       ;;
+    --touchscreen)
+      TOUCHSCREEN_MODE="true"
+      TOUCHSCREEN_OPTION_SEEN="true"
+      shift
+      ;;
     -h | --help)
       print_usage
       exit 0
@@ -354,10 +365,10 @@ parse_arguments() {
   validate_kiosk_app
 
   if [[ "$ACTION" == "reset" && "$SETUP_OPTION_SEEN" == "true" ]]; then
-    die "kiosk reset reuses the saved app, browser, user, and level. Only reboot options and --disable-gnome-clickable / --no-disable-gnome-clickable are accepted."
+    die "kiosk reset reuses the saved app, browser, user, and level. Only reboot options, --touchscreen, and --disable-gnome-clickable / --no-disable-gnome-clickable are accepted."
   fi
 
-  if [[ "$ACTION" == "remove" && ( "$SETUP_OPTION_SEEN" == "true" || "$GNOME_CLICKABLE_OVERRIDE_SEEN" == "true" ) ]]; then
+  if [[ "$ACTION" == "remove" && ( "$SETUP_OPTION_SEEN" == "true" || "$GNOME_CLICKABLE_OVERRIDE_SEEN" == "true" || "$TOUCHSCREEN_OPTION_SEEN" == "true" ) ]]; then
     die "kiosk remove accepts no setup options. Re-run first-time setup to choose a new app or browser."
   fi
 
@@ -392,6 +403,7 @@ load_saved_configuration() {
   local saved_level=""
   local saved_app="$DEFAULT_KIOSK_APP"
   local saved_disable_gnome_clickable=""
+  local saved_touchscreen_mode=""
 
   run_root test -f "$CONFIG_FILE" || die "No completed kiosk setup was found. Run prepare-kiosk.sh first."
   configuration="$(run_root cat "$CONFIG_FILE")" || die "Unable to read the saved kiosk configuration."
@@ -402,6 +414,7 @@ load_saved_configuration() {
     LOCKDOWN_LEVEL) saved_level="$value" ;;
     KIOSK_APP) saved_app="$value" ;;
     DISABLE_GNOME_CLICKABLE) saved_disable_gnome_clickable="$value" ;;
+    TOUCHSCREEN_MODE) saved_touchscreen_mode="$value" ;;
     *) die "Unexpected key in saved kiosk configuration: $key" ;;
     esac
   done <<<"$configuration"
@@ -418,12 +431,19 @@ load_saved_configuration() {
   "" | true | false) ;;
   *) die "Saved --disable-gnome-clickable value is invalid." ;;
   esac
+  case "${saved_touchscreen_mode:-}" in
+  "" | true | false) ;;
+  *) die "Saved --touchscreen value is invalid." ;;
+  esac
 
   KIOSK_USER="$saved_user"
   BROWSER_NAME="$saved_browser"
   LOCKDOWN_LEVEL="$saved_level"
   if [[ "$GNOME_CLICKABLE_OVERRIDE_SEEN" != "true" ]]; then
     DISABLE_GNOME_CLICKABLE="${saved_disable_gnome_clickable:-false}"
+  fi
+  if [[ "$TOUCHSCREEN_OPTION_SEEN" != "true" ]]; then
+    TOUCHSCREEN_MODE="${saved_touchscreen_mode:-false}"
   fi
 }
 
@@ -439,6 +459,7 @@ save_configuration() {
     printf 'LOCKDOWN_LEVEL=%s\n' "$LOCKDOWN_LEVEL"
     printf 'KIOSK_APP=%s\n' "$KIOSK_APP"
     printf 'DISABLE_GNOME_CLICKABLE=%s\n' "$DISABLE_GNOME_CLICKABLE"
+    printf 'TOUCHSCREEN_MODE=%s\n' "$TOUCHSCREEN_MODE"
   } | write_root_file_atomic "$CONFIG_FILE" 600
 }
 
@@ -474,7 +495,9 @@ install_dependencies() {
   command -v curl &>/dev/null || packages+=(curl)
   command -v xdg-mime &>/dev/null || packages+=(xdg-utils)
   command -v gnome-terminal &>/dev/null || packages+=(gnome-terminal)
-  command -v kgx &>/dev/null || packages+=(gnome-console)
+  if [[ "$TOUCHSCREEN_MODE" == "true" ]] && ! command -v kgx &>/dev/null; then
+    packages+=(gnome-console)
+  fi
 
   case "$BROWSER_NAME" in
   firefox)
@@ -505,6 +528,11 @@ install_dependencies() {
     run_root apt-get update
     log "Installing required packages: ${packages[*]}"
     run_root apt-get install -y "${packages[@]}"
+  fi
+
+  if [[ "$TOUCHSCREEN_MODE" == "true" ]]; then
+    command -v kgx &>/dev/null || die "GNOME Console is required for --touchscreen."
+    [[ -r "$GNOME_CONSOLE_SERVICE" ]] || die "GNOME Console is installed but its D-Bus service is unavailable at $GNOME_CONSOLE_SERVICE."
   fi
 }
 
@@ -782,8 +810,8 @@ _kiosk_completions() {
   esac
 
   case "$action" in
-    setup)  COMPREPLY=( $(compgen -W "--level --browser --app --user --disable-gnome-clickable --no-disable-gnome-clickable --reboot --no-reboot -h --help" -- "$cur") ) ;;
-    reset)  COMPREPLY=( $(compgen -W "--disable-gnome-clickable --no-disable-gnome-clickable --reboot --no-reboot -h --help" -- "$cur") ) ;;
+    setup)  COMPREPLY=( $(compgen -W "--level --browser --app --user --touchscreen --disable-gnome-clickable --no-disable-gnome-clickable --reboot --no-reboot -h --help" -- "$cur") ) ;;
+    reset)  COMPREPLY=( $(compgen -W "--touchscreen --disable-gnome-clickable --no-disable-gnome-clickable --reboot --no-reboot -h --help" -- "$cur") ) ;;
     remove) COMPREPLY=( $(compgen -W "-h --help" -- "$cur") ) ;;
   esac
 }
@@ -1705,6 +1733,9 @@ run_setup() {
   log "Lockdown level: $LOCKDOWN_LEVEL"
   log "Browser: $BROWSER_NAME"
   log "App: $KIOSK_APP"
+  if [[ "$TOUCHSCREEN_MODE" == "true" ]]; then
+    log "Touchscreen Nautilus console path: enabled (--touchscreen)"
+  fi
   if [[ "$DISABLE_GNOME_CLICKABLE" == "true" ]]; then
     log "Activities button and Settings gear: hidden (--disable-gnome-clickable)"
   fi
@@ -1733,15 +1764,18 @@ run_reset() {
   configure_gdm_autologin
   apply_lockdown
   activate_autostart_stage
-  if [[ "$GNOME_CLICKABLE_OVERRIDE_SEEN" == "true" ]]; then
+  if [[ "$GNOME_CLICKABLE_OVERRIDE_SEEN" == "true" || "$TOUCHSCREEN_OPTION_SEEN" == "true" ]]; then
     save_configuration
-    log "Saved updated --disable-gnome-clickable state."
+    log "Saved updated kiosk options."
   fi
 
   log ""
   log "Kiosk reset completed successfully."
   log "The original autostart baseline and managed kiosk launcher are restored."
   log "App: $KIOSK_APP"
+  if [[ "$TOUCHSCREEN_MODE" == "true" ]]; then
+    log "Touchscreen Nautilus console path: enabled (--touchscreen)"
+  fi
   if [[ "$DISABLE_GNOME_CLICKABLE" == "true" ]]; then
     log "Activities button and Settings gear: hidden (--disable-gnome-clickable)"
   elif [[ "$GNOME_CLICKABLE_OVERRIDE_SEEN" == "true" ]]; then
