@@ -37,6 +37,7 @@ Defaults:
 - Lockdown: Level 2
 - Autologin account: Current user
 - Reboot: Ask after successful setup when stdin is an interactive terminal; otherwise skip reboot
+- Activities button and Quick Settings gear: Not hidden (see `--disable-gnome-clickable`)
 
 For unattended deployment to the 12 workshop devices:
 
@@ -45,6 +46,21 @@ For unattended deployment to the 12 workshop devices:
 ```
 
 Use `--no-reboot` to finish configuration without rebooting. Google Chrome must already be installed if selected; Firefox and Chromium are installed through `apt-get` when missing.
+
+To also hide the clickable Activities button and the GNOME Settings gear in Quick Settings (useful if a participant reaches the desktop), pass `--disable-gnome-clickable`:
+
+```bash
+./prepare-kiosk.sh --level 2 --browser firefox --user kiosk --disable-gnome-clickable --reboot
+```
+
+The flag is optional and off by default while the approach is validated across the workshop images. When set, the installer installs and enables the `user-theme` GNOME Shell extension (`gnome-shell-extension-user-theme`) and drops a small user theme under `~/.themes/ctrl-esc-host-kiosk/gnome-shell/gnome-shell.css` that hides the `#panelActivities` button. It also creates a managed user-level `org.gnome.Settings.desktop` override with `Hidden=true`; GNOME Shell then omits the Settings gear and Settings application-search entry. This does not uninstall or prevent direct execution of `gnome-control-center`. The changes take effect on the next GNOME Shell restart or login.
+
+`kiosk reset` reuses the saved `--disable-gnome-clickable` state. To toggle it on an already-configured device without a full re-setup, pass either flag to `kiosk reset`; the new state is persisted and applied:
+
+```bash
+kiosk reset --disable-gnome-clickable --reboot      # hide Activities and Settings gear
+kiosk reset --no-disable-gnome-clickable --reboot  # restore both controls
+```
 
 Firefox is resolved from the system `PATH`. On current Ubuntu Desktop installations this normally selects `/snap/bin/firefox`; the installer no longer silently prefers a separate Firefox under `~/.local/opt`. It resolves Firefox's declared default profile, atomically merges only the close-tab, close-window, and quit overrides into that profile's `customKeys.json`, and launches the kiosk with that same profile. Refresh the Firefox Snap before workshop deployment and validate the shortcut and email-link workflows on each image.
 
@@ -78,7 +94,7 @@ Level 2 includes Level 1 and blocks common kiosk escape navigation:
 - `Ctrl+W`, `Ctrl+Shift+W`, `Ctrl+T`, `Ctrl+Shift+T`, `Ctrl+N`, and `Ctrl+Shift+N`
 - `Ctrl+L`, `F11`, `F12`, and common Chromium developer-tools shortcuts
 
-The script uses normal GNOME `gsettings` and custom media-key bindings. It does not install a GNOME Shell extension or modify the top bar. The browser's full-screen kiosk mode covers the desktop UI.
+By default the script uses normal GNOME `gsettings` and custom media-key bindings and does not install a GNOME Shell extension or modify the top bar; the browser's full-screen kiosk mode covers the desktop UI. The optional `--disable-gnome-clickable` flag is the one exception: it enables the `user-theme` extension, installs a minimal user theme to hide the clickable Activities button, and masks the Settings desktop entry so GNOME Shell omits its Quick Settings gear.
 
 The Firefox profile shortcut overrides apply at either lockdown level when Firefox is selected. Existing unrelated `customKeys.json` entries are preserved.
 
@@ -172,4 +188,4 @@ It first verifies that the active systemd display-manager service and Debian dis
 
 ## Scope
 
-The lockdown targets common core GNOME and browser navigation used to escape a full-screen workshop kiosk. It does not manage GNOME Shell extension shortcuts or disable Linux virtual-terminal switching such as `Ctrl+Alt+F3`, firmware keys, or physical access recovery.
+The lockdown targets common core GNOME and browser navigation used to escape a full-screen workshop kiosk. It does not manage GNOME Shell extension shortcuts or disable Linux virtual-terminal switching such as `Ctrl+Alt+F3`, firmware keys, or physical access recovery. The optional `--disable-gnome-clickable` flag hides the top-bar Activities button and Quick Settings gear; it does not remove other top-bar indicators, block the overview from other entry points, or prevent direct execution of `gnome-control-center` after shell access.
