@@ -40,11 +40,11 @@ kiosk remove
 
 `kiosk remove` clears the saved configuration and the managed autostart entry. GDM autologin and GNOME lockdown remain until the next setup overwrites them.
 
-## Optional: Hide the Activities Button
+## Optional: Hide Activities and Settings
 
-The `--disable-gnome-clickable` flag is **optional and not part of the standard workshop kiosk setup.** It is off by default while the approach is validated. The standard lockdown already disables the Activities keyboard shortcut and hot corner; this flag additionally hides the clickable Activities button in the GNOME top bar, which only matters if a participant reaches the desktop.
+The `--disable-gnome-clickable` flag is **optional and not part of the standard workshop kiosk setup.** It is off by default while the approach is validated. The standard lockdown already disables the Activities keyboard shortcut and hot corner; this flag additionally hides the clickable Activities button and the Settings gear in Quick Settings, which only matters if a participant reaches the desktop.
 
-If you choose to enable it on a device, pass it during first-time setup. It installs and enables the `user-theme` GNOME Shell extension and a small user theme, and the change takes effect on the next login. `kiosk reset` reuses whatever state was saved at setup.
+If you choose to enable it on a device, pass it during first-time setup. It installs and enables the `user-theme` GNOME Shell extension, a small user theme, and a managed desktop-entry mask for GNOME Settings. It does not uninstall `gnome-control-center`. The changes take effect on the next login. `kiosk reset` reuses whatever state was saved at setup.
 
 ```bash
 ./prepare-kiosk.sh --level 2 --browser firefox --user kiosk --disable-gnome-clickable --reboot
@@ -53,8 +53,8 @@ If you choose to enable it on a device, pass it during first-time setup. It inst
 To toggle it on an already-configured device without a full re-setup, pass either flag to `kiosk reset`. The new state is persisted and applied on reboot:
 
 ```bash
-kiosk reset --disable-gnome-clickable --reboot      # hide the Activities button
-kiosk reset --no-disable-gnome-clickable --reboot   # restore the Activities button
+kiosk reset --disable-gnome-clickable --reboot      # hide Activities and Settings gear
+kiosk reset --no-disable-gnome-clickable --reboot   # restore both controls
 ```
 
 ## Workshop Links

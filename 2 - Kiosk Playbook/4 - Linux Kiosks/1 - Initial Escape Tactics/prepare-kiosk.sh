@@ -43,6 +43,8 @@ INSTALL_COMPLETION="/usr/share/bash-completion/completions/kiosk"
 
 DESKTOP_FILE_NAME="skyline-kiosk.desktop"
 HTML_FILE_NAME="airline_kiosk.html"
+SETTINGS_DESKTOP_FILE_NAME="org.gnome.Settings.desktop"
+SETTINGS_DESKTOP_MASK_MARKER="X-CTRL-ESC-HOST-Managed=true"
 RECOVERY_ACCELERATOR="<Control><Alt><Shift>o"
 CUSTOM_BINDING_SCHEMA="org.gnome.settings-daemon.plugins.media-keys"
 CUSTOM_BINDING_BASE="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings"
@@ -83,6 +85,7 @@ AUTOSTART_PREVIOUS=""
 KIOSK_DIR=""
 KIOSK_HTML=""
 KIOSK_WRAPPER=""
+SETTINGS_DESKTOP_MASK=""
 KIOSK_HTML_TEMP=""
 KIOSK_WRAPPER_TEMP=""
 KIOSK_DESKTOP_TEMP=""
@@ -153,14 +156,14 @@ First-run options:
   --browser firefox|chromium|chrome
                               Browser used for the kiosk (default: firefox)
   --user USER                 GDM autologin user (default: current user)
-  --disable-gnome-clickable  Also hide the clickable Activities button in the
-                              GNOME top bar (installs/enables the user-theme
-                              GNOME Shell extension and a small theme). Off by
-                              default while the approach is validated.
+  --disable-gnome-clickable  Hide the clickable Activities button and the
+                              Quick Settings gear (installs/enables the
+                              user-theme GNOME Shell extension and a small
+                              theme). Off by default while being validated.
   --no-disable-gnome-clickable
-                              Re-enable the Activities button and remove the
-                              kiosk theme. Accepted on setup or reset to toggle
-                              the saved state.
+                              Restore the Activities button and Settings gear.
+                              Accepted on setup or reset to toggle the saved
+                              state.
   --reboot                    Reboot automatically after success
   --no-reboot                 Do not reboot after success
   -h, --help                  Show this help
@@ -242,6 +245,7 @@ set_user_paths() {
   KIOSK_DIR="$KIOSK_HOME/Public"
   KIOSK_HTML="$KIOSK_DIR/$HTML_FILE_NAME"
   KIOSK_WRAPPER="$KIOSK_DIR/start-kiosk.sh"
+  SETTINGS_DESKTOP_MASK="$KIOSK_HOME/.local/share/applications/$SETTINGS_DESKTOP_FILE_NAME"
 }
 
 parse_arguments() {
@@ -1387,17 +1391,66 @@ install_user_theme_files() {
 
   cat >"$KIOSK_USER_THEME_CSS" <<'EOF'
 /* CTRL+ESC+HOST kiosk theme: hide the clickable Activities button. */
-#panelActivities {
+#panel .panel-button#panelActivities,
+#panel .panel-button#panelActivities StBoxLayout,
+#panel .panel-button#panelActivities .workspace-dot {
   opacity: 0 !important;
   width: 0 !important;
   height: 0 !important;
   padding: 0 !important;
   margin: 0 !important;
   border: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  -st-pointer-events: none !important;
 }
 EOF
   chmod 644 "$KIOSK_USER_THEME_CSS"
   log "Installed the kiosk GNOME Shell theme at $KIOSK_USER_THEME_DIR"
+}
+
+install_settings_desktop_mask() {
+  local applications_dir="${SETTINGS_DESKTOP_MASK%/*}"
+  local temporary
+
+  [[ -n "$SETTINGS_DESKTOP_MASK" ]] || die "The Settings desktop-mask path was not initialized."
+  mkdir -p "$applications_dir"
+  if [[ -e "$SETTINGS_DESKTOP_MASK" || -L "$SETTINGS_DESKTOP_MASK" ]]; then
+    [[ -f "$SETTINGS_DESKTOP_MASK" && ! -L "$SETTINGS_DESKTOP_MASK" ]] \
+      || die "$SETTINGS_DESKTOP_MASK exists but is not a regular file."
+    grep -Fxq "$SETTINGS_DESKTOP_MASK_MARKER" "$SETTINGS_DESKTOP_MASK" \
+      || die "$SETTINGS_DESKTOP_MASK already exists and is not managed by the kiosk installer."
+  fi
+
+  temporary="$(/usr/bin/mktemp "$applications_dir/.gnome-settings-mask.XXXXXX")"
+  cat >"$temporary" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Settings
+Hidden=true
+NoDisplay=true
+$SETTINGS_DESKTOP_MASK_MARKER
+EOF
+  chmod 644 "$temporary"
+  mv -f -- "$temporary" "$SETTINGS_DESKTOP_MASK"
+  if command -v update-desktop-database &>/dev/null; then
+    update-desktop-database "$applications_dir" || warn "Unable to refresh the user desktop-file cache."
+  fi
+  log "Masked GNOME Settings from Shell application discovery: $SETTINGS_DESKTOP_MASK"
+}
+
+remove_settings_desktop_mask() {
+  [[ -n "$SETTINGS_DESKTOP_MASK" ]] || die "The Settings desktop-mask path was not initialized."
+  [[ -e "$SETTINGS_DESKTOP_MASK" || -L "$SETTINGS_DESKTOP_MASK" ]] || return 0
+  [[ -f "$SETTINGS_DESKTOP_MASK" && ! -L "$SETTINGS_DESKTOP_MASK" ]] \
+    || die "$SETTINGS_DESKTOP_MASK exists but is not a regular file."
+  grep -Fxq "$SETTINGS_DESKTOP_MASK_MARKER" "$SETTINGS_DESKTOP_MASK" \
+    || die "$SETTINGS_DESKTOP_MASK exists and is not managed by the kiosk installer."
+  rm -f -- "$SETTINGS_DESKTOP_MASK"
+  if command -v update-desktop-database &>/dev/null; then
+    update-desktop-database "${SETTINGS_DESKTOP_MASK%/*}" || warn "Unable to refresh the user desktop-file cache."
+  fi
+  log "Removed the managed GNOME Settings desktop mask."
 }
 
 remove_user_theme_files() {
@@ -1417,8 +1470,9 @@ configure_gnome_clickable_lockdown() {
       || die "The $THEME_BASE_SCHEMA schema is unavailable. Install $USER_THEME_EXTENSION_PACKAGE and re-run setup."
     enable_user_theme_extension
     install_user_theme_files
+    install_settings_desktop_mask
     set_required_gsettings_key "$THEME_BASE_SCHEMA" "$THEME_BASE_KEY" "'$USER_THEME_NAME'"
-    log "Activities button hidden. The change applies on the next GNOME Shell restart or login."
+    log "Activities button and Quick Settings gear hidden. The change applies on the next GNOME Shell restart or login."
   elif [[ "$GNOME_CLICKABLE_OVERRIDE_SEEN" == "true" ]]; then
     log "Re-enabling the clickable Activities button (--no-disable-gnome-clickable)..."
     if gsettings_schema_exists "$THEME_BASE_SCHEMA"; then
@@ -1428,7 +1482,8 @@ configure_gnome_clickable_lockdown() {
       "$GNOME_EXTENSIONS_BIN" disable "$USER_THEME_EXTENSION_UUID" 2>/dev/null || true
     fi
     remove_user_theme_files
-    log "Activities button restored. The change applies on the next GNOME Shell restart or login."
+    remove_settings_desktop_mask
+    log "Activities button and Quick Settings gear restored. The change applies on the next GNOME Shell restart or login."
   fi
 }
 
@@ -1510,7 +1565,7 @@ run_setup() {
   log "Lockdown level: $LOCKDOWN_LEVEL"
   log "Browser: $BROWSER_NAME"
   if [[ "$DISABLE_GNOME_CLICKABLE" == "true" ]]; then
-    log "Activities button: hidden (--disable-gnome-clickable)"
+    log "Activities button and Settings gear: hidden (--disable-gnome-clickable)"
   fi
   log "Recovery: Ctrl+Alt+Shift+O, then run 'kiosk reset'"
   maybe_reboot
@@ -1547,9 +1602,9 @@ run_reset() {
   log "Kiosk reset completed successfully."
   log "The original autostart baseline and managed kiosk launcher are restored."
   if [[ "$DISABLE_GNOME_CLICKABLE" == "true" ]]; then
-    log "Activities button: hidden (--disable-gnome-clickable)"
+    log "Activities button and Settings gear: hidden (--disable-gnome-clickable)"
   elif [[ "$GNOME_CLICKABLE_OVERRIDE_SEEN" == "true" ]]; then
-    log "Activities button: visible (--no-disable-gnome-clickable)"
+    log "Activities button and Settings gear: visible (--no-disable-gnome-clickable)"
   fi
   log "Recovery: Ctrl+Alt+Shift+O, then run 'kiosk reset'"
   maybe_reboot
