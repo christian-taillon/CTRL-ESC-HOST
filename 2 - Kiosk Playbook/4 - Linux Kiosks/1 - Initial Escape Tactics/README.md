@@ -38,6 +38,7 @@ Defaults:
 - Autologin account: Current user
 - Reboot: Ask after successful setup when stdin is an interactive terminal; otherwise skip reboot
 - Activities button and Quick Settings gear: Not hidden (see `--disable-gnome-clickable`)
+- Screen blanking, automatic suspend, and lock screen: Disabled
 
 For unattended deployment to the 12 workshop devices:
 
@@ -132,7 +133,7 @@ The first setup captures `~/.config/autostart` before adding the kiosk launcher.
 2. Restores the exact first-run baseline.
 3. Adds the managed `skyline-kiosk.desktop` entry back on top of the baseline.
 4. Refreshes the installed kiosk HTML and browser wrapper.
-5. Reapplies GDM autologin, the saved lockdown level, and the instructor shortcut.
+5. Reapplies GDM autologin, disables idle blanking/suspend/locking, and restores the saved lockdown level and instructor shortcut.
 6. Asks whether to reboot when run from an interactive terminal. Without an interactive terminal it skips reboot unless `--reboot` is supplied.
 
 Use either reboot mode when scripting a reset:

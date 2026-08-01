@@ -1392,6 +1392,16 @@ apply_level_two_lockdown() {
     terminal
 }
 
+disable_screen_timeout_sleep_and_lock() {
+  log "Disabling screen blanking, automatic suspend, and the lock screen..."
+  set_required_gsettings_key "org.gnome.desktop.session" idle-delay "uint32 0"
+  set_required_gsettings_key "org.gnome.desktop.screensaver" lock-enabled "false"
+  set_required_gsettings_key "org.gnome.desktop.lockdown" disable-lock-screen "true"
+  set_required_gsettings_key "org.gnome.settings-daemon.plugins.power" idle-dim "false"
+  set_required_gsettings_key "org.gnome.settings-daemon.plugins.power" sleep-inactive-ac-type "'nothing'"
+  set_required_gsettings_key "org.gnome.settings-daemon.plugins.power" sleep-inactive-battery-type "'nothing'"
+}
+
 user_theme_extension_enabled() {
   local enabled_list
   enabled_list="$(gsettings get org.gnome.shell enabled-extensions 2>/dev/null || true)"
@@ -1557,6 +1567,7 @@ configure_gnome_clickable_lockdown() {
 
 apply_lockdown() {
   capture_custom_bindings_once
+  disable_screen_timeout_sleep_and_lock
   apply_level_one_lockdown
   if [[ "$LOCKDOWN_LEVEL" == "2" ]]; then
     apply_level_two_lockdown
