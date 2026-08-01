@@ -121,7 +121,7 @@ The Firefox profile shortcut overrides apply at either lockdown level when Firef
 
 The installer refreshes APT metadata when dependencies are missing and installs Thunderbird and `curl` when absent. It selects an installed Thunderbird desktop entry as the OS `mailto:` handler and checks that association with `xdg-mime`. A post-set query mismatch produces a note instead of aborting kiosk deployment. The selected browser still decides whether to delegate a `mailto:` link to the OS, so verify the email-link workflow in the deployed browser profile.
 
-The installer also installs `mousetweaks` when needed and enables GNOME's simulated secondary click. On a touch screen, hold an item or blank area for one second and release to open its context menu. Setup and `kiosk reset` both reapply this setting.
+Ubuntu Resolute does not provide the retired `mousetweaks` package. Nautilus 50 handles touch context menus natively on file and folder items: press and hold an item until its context menu opens. Blank whitespace does not provide the same native long-press gesture.
 
 ## Instructor Recovery
 
