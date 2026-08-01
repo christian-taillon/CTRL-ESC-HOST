@@ -41,6 +41,11 @@ body.tiny-screen .identity small,body.tiny-screen .topchip,body.tiny-screen .foo
 
 @media(max-width:1180px),(max-height:720px){body{overflow:hidden}.device{width:100vw;height:100dvh;margin:0;border:0;border-radius:0}.device:before,.device:after{display:none}}
 
+/* The kiosk has no footer; let the application fill the entire display. */
+.app{grid-template-rows:clamp(56px,8.8vh,82px) minmax(0,1fr)}
+body.compact-screen .app{grid-template-rows:clamp(52px,10vh,68px) minmax(0,1fr)}
+@media(max-width:980px){.cart{bottom:0}}
+
 @media print{body{background:#fff}.device,.modal,.toast{display:none!important}.printonly{display:block;width:320px;margin:auto;color:#000;font-family:"Courier New",monospace}.printonly h1,.printonly p{text-align:center}.printonly hr{border:0;border-top:1px dashed #000}}
 </style>
 </head>
@@ -92,7 +97,6 @@ body.tiny-screen .identity small,body.tiny-screen .topchip,body.tiny-screen .foo
 </main>
 <aside class="cart" id="cart"><div class="carthead"><div><h2>Your order</h2><small id="itemCount">0 items</small></div><button class="close hidden" id="cartClose" onclick="closeCart()">×</button></div><div class="cartitems" id="cartItems"></div><div class="reward" id="reward"><div class="rewardline"><div><strong id="rewardTitle">Earn rewards on this order</strong><p id="rewardCopy">Sign in for member pricing and points.</p></div><button class="textbtn" id="rewardAction" onclick="openModal('loginModal')">Sign in</button></div><button class="supportbtn hidden" id="supportCart" onclick="openSupport()">Contact Support and view benefits</button></div><div class="totals" id="cartTotals"></div><button class="primary checkoutbtn" id="checkoutBtn" onclick="checkout()" disabled>Review and pay</button><p class="points" id="pointsNote">Add an item to begin.</p></aside>
 </div>
-<footer class="footer"><span>Self-service ordering · No internet connection required</span><div class="footlinks"><span>Kiosk help:</span><a class="systemlink" href="tel:+18005550148" aria-label="Call kiosk support at 1-800-555-0148">1-800-555-0148</a><a class="systemlink" href="mailto:rewards-support@airportkiosk.example?subject=Kiosk%20Support" aria-label="Email kiosk support">Email support</a><button onclick="openModal('accessModal')">Accessibility</button></div></footer>
 </div></div>
 
 <div class="modal" id="customModal"><div class="dialog wide"><div class="dialoghead"><div><h2 id="customTitle">Customize item</h2><p id="customDesc"></p></div><button class="close" onclick="closeModal('customModal')">×</button></div><div class="dialogbody" id="customBody"></div></div></div>
