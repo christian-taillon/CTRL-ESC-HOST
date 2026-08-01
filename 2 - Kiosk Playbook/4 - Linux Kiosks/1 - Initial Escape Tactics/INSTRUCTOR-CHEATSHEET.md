@@ -12,7 +12,7 @@ Plug in the device and turn it on. No setup is needed.
 
 If the kiosk does not appear, wait briefly, then use the recovery steps below.
 
-For Firefox 147 or newer, manually verify that `Ctrl+W`, `Ctrl+Shift+W`, and `Ctrl+Q` do nothing. Then confirm that available controls or links can still open and use multiple tabs and popup windows, and that the kiosk Email link still launches the configured Thunderbird application.
+For Firefox 147 or newer, manually verify that `Ctrl+W`, `Ctrl+Shift+W`, and `Ctrl+Q` do nothing. Then confirm that available controls or links can still open and use multiple tabs and popup windows, and that the kiosk Email link still launches the configured Thunderbird application. On touch screens, confirm that holding an item or blank area for one second and releasing opens its context menu.
 
 ## Reset Between Students
 

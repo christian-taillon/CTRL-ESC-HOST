@@ -62,6 +62,7 @@ REBOOT_OPTION_SEEN="false"
 SETUP_OPTION_SEEN="false"
 DISABLE_GNOME_CLICKABLE="false"
 GNOME_CLICKABLE_OVERRIDE_SEEN="false"
+SECONDARY_CLICK_TIME="1.0"
 
 USER_THEME_EXTENSION_UUID="user-theme@gnome-shell-extensions.gcampax.github.com"
 USER_THEME_EXTENSION_PACKAGE="gnome-shell-extension-user-theme"
@@ -473,6 +474,7 @@ install_dependencies() {
   command -v thunderbird &>/dev/null || packages+=(thunderbird)
   command -v xdg-mime &>/dev/null || packages+=(xdg-utils)
   command -v gnome-terminal &>/dev/null || packages+=(gnome-terminal)
+  command -v mousetweaks &>/dev/null || packages+=(mousetweaks)
 
   case "$BROWSER_NAME" in
   firefox)
@@ -1459,6 +1461,12 @@ disable_screen_timeout_sleep_and_lock() {
   set_required_gsettings_key "org.gnome.settings-daemon.plugins.power" sleep-inactive-battery-type "'nothing'"
 }
 
+enable_simulated_secondary_click() {
+  log "Enabling ${SECONDARY_CLICK_TIME}-second press-and-hold simulated secondary click..."
+  set_required_gsettings_key "org.gnome.desktop.a11y.mouse" secondary-click-enabled "true"
+  set_required_gsettings_key "org.gnome.desktop.a11y.mouse" secondary-click-time "$SECONDARY_CLICK_TIME"
+}
+
 user_theme_extension_enabled() {
   local enabled_list
   enabled_list="$(gsettings get org.gnome.shell enabled-extensions 2>/dev/null || true)"
@@ -1625,6 +1633,7 @@ configure_gnome_clickable_lockdown() {
 apply_lockdown() {
   capture_custom_bindings_once
   disable_screen_timeout_sleep_and_lock
+  enable_simulated_secondary_click
   apply_level_one_lockdown
   if [[ "$LOCKDOWN_LEVEL" == "2" ]]; then
     apply_level_two_lockdown

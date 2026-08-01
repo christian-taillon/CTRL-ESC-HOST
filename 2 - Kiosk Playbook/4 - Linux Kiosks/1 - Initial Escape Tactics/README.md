@@ -121,6 +121,8 @@ The Firefox profile shortcut overrides apply at either lockdown level when Firef
 
 The installer installs Thunderbird when it is absent, selects an installed Thunderbird desktop entry as the OS `mailto:` handler, and checks that association with `xdg-mime`. A post-set query mismatch produces a note instead of aborting kiosk deployment. The selected browser still decides whether to delegate a `mailto:` link to the OS, so verify the email-link workflow in the deployed browser profile.
 
+The installer also installs `mousetweaks` when needed and enables GNOME's simulated secondary click. On a touch screen, hold an item or blank area for one second and release to open its context menu. Setup and `kiosk reset` both reapply this setting.
+
 ## Instructor Recovery
 
 Both levels reserve this instructor shortcut:

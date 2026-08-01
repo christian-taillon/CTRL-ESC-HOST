@@ -90,7 +90,7 @@ We now utilize the legitimate UI of the mail client to spawn a File Manager wind
 
 Because the File Manager was spawned by the Mail Client (which was spawned by the User), it inherits User permissions.
 
-1. In the File Manager window, right-click in any whitespace.
+1. In the File Manager window, right-click in any whitespace. On the touch screen, press and hold for one second, then release.
 2. Select **Open in Terminal**.
 3. **Result:** You have a terminal shell as the `kiosk` user, breaking out of the browser's restrictions.
 
