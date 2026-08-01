@@ -43,6 +43,8 @@ INSTALL_COMPLETION="/usr/share/bash-completion/completions/kiosk"
 
 DESKTOP_FILE_NAME="skyline-kiosk.desktop"
 HTML_FILE_NAME="airline_kiosk.html"
+SETTINGS_DESKTOP_FILE_NAME="org.gnome.Settings.desktop"
+SETTINGS_DESKTOP_MASK_MARKER="X-CTRL-ESC-HOST-Managed=true"
 RECOVERY_ACCELERATOR="<Control><Alt><Shift>o"
 CUSTOM_BINDING_SCHEMA="org.gnome.settings-daemon.plugins.media-keys"
 CUSTOM_BINDING_BASE="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings"
@@ -55,6 +57,20 @@ KIOSK_USER="$($ID_BIN -un)"
 REBOOT_MODE="ask"
 REBOOT_OPTION_SEEN="false"
 SETUP_OPTION_SEEN="false"
+DISABLE_GNOME_CLICKABLE="false"
+GNOME_CLICKABLE_OVERRIDE_SEEN="false"
+
+USER_THEME_EXTENSION_UUID="user-theme@gnome-shell-extensions.gcampax.github.com"
+USER_THEME_EXTENSION_PACKAGE="gnome-shell-extension-user-theme"
+USER_THEME_NAME="ctrl-esc-host-kiosk"
+USER_THEME_DIR_NAME=".themes"
+USER_THEME_GNOME_SHELL_SUBDIR="gnome-shell"
+USER_THEME_CSS_NAME="gnome-shell.css"
+GNOME_EXTENSIONS_BIN="/usr/bin/gnome-extensions"
+THEME_BASE_SCHEMA="org.gnome.shell.extensions.user-theme"
+THEME_BASE_KEY="name"
+KIOSK_USER_THEME_DIR=""
+KIOSK_USER_THEME_CSS=""
 
 CURRENT_USER="$($ID_BIN -un)"
 KIOSK_HOME="$HOME"
@@ -69,6 +85,7 @@ AUTOSTART_PREVIOUS=""
 KIOSK_DIR=""
 KIOSK_HTML=""
 KIOSK_WRAPPER=""
+SETTINGS_DESKTOP_MASK=""
 KIOSK_HTML_TEMP=""
 KIOSK_WRAPPER_TEMP=""
 KIOSK_DESKTOP_TEMP=""
@@ -139,6 +156,14 @@ First-run options:
   --browser firefox|chromium|chrome
                               Browser used for the kiosk (default: firefox)
   --user USER                 GDM autologin user (default: current user)
+  --disable-gnome-clickable  Hide the clickable Activities button and the
+                              Quick Settings gear (installs/enables the
+                              user-theme GNOME Shell extension and a small
+                              theme). Off by default while being validated.
+  --no-disable-gnome-clickable
+                              Restore the Activities button and Settings gear.
+                              Accepted on setup or reset to toggle the saved
+                              state.
   --reboot                    Reboot automatically after success
   --no-reboot                 Do not reboot after success
   -h, --help                  Show this help
@@ -220,6 +245,7 @@ set_user_paths() {
   KIOSK_DIR="$KIOSK_HOME/Public"
   KIOSK_HTML="$KIOSK_DIR/$HTML_FILE_NAME"
   KIOSK_WRAPPER="$KIOSK_DIR/start-kiosk.sh"
+  SETTINGS_DESKTOP_MASK="$KIOSK_HOME/.local/share/applications/$SETTINGS_DESKTOP_FILE_NAME"
 }
 
 parse_arguments() {
@@ -262,6 +288,16 @@ parse_arguments() {
       REBOOT_OPTION_SEEN="true"
       shift
       ;;
+    --disable-gnome-clickable)
+      DISABLE_GNOME_CLICKABLE="true"
+      GNOME_CLICKABLE_OVERRIDE_SEEN="true"
+      shift
+      ;;
+    --no-disable-gnome-clickable)
+      DISABLE_GNOME_CLICKABLE="false"
+      GNOME_CLICKABLE_OVERRIDE_SEEN="true"
+      shift
+      ;;
     -h | --help)
       print_usage
       exit 0
@@ -279,10 +315,10 @@ parse_arguments() {
   esac
 
   if [[ "$ACTION" == "reset" && "$SETUP_OPTION_SEEN" == "true" ]]; then
-    die "kiosk reset reuses the saved browser, user, and level. Only reboot options are accepted."
+    die "kiosk reset reuses the saved browser, user, and level. Only reboot options and --disable-gnome-clickable / --no-disable-gnome-clickable are accepted."
   fi
 
-  if [[ "$ACTION" == "remove" && "$SETUP_OPTION_SEEN" == "true" ]]; then
+  if [[ "$ACTION" == "remove" && ( "$SETUP_OPTION_SEEN" == "true" || "$GNOME_CLICKABLE_OVERRIDE_SEEN" == "true" ) ]]; then
     die "kiosk remove accepts no setup options. Re-run first-time setup to choose a new browser."
   fi
 
@@ -308,6 +344,7 @@ load_saved_configuration() {
   local saved_user=""
   local saved_browser=""
   local saved_level=""
+  local saved_disable_gnome_clickable=""
 
   run_root test -f "$CONFIG_FILE" || die "No completed kiosk setup was found. Run prepare-kiosk.sh first."
   configuration="$(run_root cat "$CONFIG_FILE")" || die "Unable to read the saved kiosk configuration."
@@ -316,6 +353,7 @@ load_saved_configuration() {
     KIOSK_USER) saved_user="$value" ;;
     BROWSER_NAME) saved_browser="$value" ;;
     LOCKDOWN_LEVEL) saved_level="$value" ;;
+    DISABLE_GNOME_CLICKABLE) saved_disable_gnome_clickable="$value" ;;
     *) die "Unexpected key in saved kiosk configuration: $key" ;;
     esac
   done <<<"$configuration"
@@ -326,10 +364,17 @@ load_saved_configuration() {
   *) die "Saved browser is invalid." ;;
   esac
   [[ "$saved_level" == "1" || "$saved_level" == "2" ]] || die "Saved lockdown level is invalid."
+  case "${saved_disable_gnome_clickable:-}" in
+  "" | true | false) ;;
+  *) die "Saved --disable-gnome-clickable value is invalid." ;;
+  esac
 
   KIOSK_USER="$saved_user"
   BROWSER_NAME="$saved_browser"
   LOCKDOWN_LEVEL="$saved_level"
+  if [[ "$GNOME_CLICKABLE_OVERRIDE_SEEN" != "true" ]]; then
+    DISABLE_GNOME_CLICKABLE="${saved_disable_gnome_clickable:-false}"
+  fi
 }
 
 ensure_state_directory() {
@@ -342,6 +387,7 @@ save_configuration() {
     printf 'KIOSK_USER=%s\n' "$KIOSK_USER"
     printf 'BROWSER_NAME=%s\n' "$BROWSER_NAME"
     printf 'LOCKDOWN_LEVEL=%s\n' "$LOCKDOWN_LEVEL"
+    printf 'DISABLE_GNOME_CLICKABLE=%s\n' "$DISABLE_GNOME_CLICKABLE"
   } | write_root_file_atomic "$CONFIG_FILE" 600
 }
 
@@ -405,6 +451,20 @@ install_dependencies() {
     log "Installing required packages: ${packages[*]}"
     run_root apt-get install -y "${packages[@]}"
   fi
+}
+
+ensure_user_theme_extension() {
+  [[ "$DISABLE_GNOME_CLICKABLE" == "true" ]] || return 0
+
+  command -v "$GNOME_EXTENSIONS_BIN" &>/dev/null || die "$GNOME_EXTENSIONS_BIN is required for --disable-gnome-clickable (install the gnome-shell package)."
+
+  if ! "$GNOME_EXTENSIONS_BIN" list --system 2>/dev/null | grep -Fxq "$USER_THEME_EXTENSION_UUID"; then
+    log "Installing the user-theme GNOME Shell extension package for --disable-gnome-clickable..."
+    run_root apt-get install -y "$USER_THEME_EXTENSION_PACKAGE"
+  fi
+
+  "$GNOME_EXTENSIONS_BIN" list --system 2>/dev/null | grep -Fxq "$USER_THEME_EXTENSION_UUID" \
+    || die "The user-theme GNOME Shell extension is unavailable after installing $USER_THEME_EXTENSION_PACKAGE."
 }
 
 resolve_browser() {
@@ -660,8 +720,8 @@ _kiosk_completions() {
   esac
 
   case "$action" in
-    setup)  COMPREPLY=( $(compgen -W "--level --browser --user --reboot --no-reboot -h --help" -- "$cur") ) ;;
-    reset)  COMPREPLY=( $(compgen -W "--reboot --no-reboot -h --help" -- "$cur") ) ;;
+    setup)  COMPREPLY=( $(compgen -W "--level --browser --user --disable-gnome-clickable --no-disable-gnome-clickable --reboot --no-reboot -h --help" -- "$cur") ) ;;
+    reset)  COMPREPLY=( $(compgen -W "--disable-gnome-clickable --no-disable-gnome-clickable --reboot --no-reboot -h --help" -- "$cur") ) ;;
     remove) COMPREPLY=( $(compgen -W "-h --help" -- "$cur") ) ;;
   esac
 }
@@ -1301,12 +1361,139 @@ apply_level_two_lockdown() {
     terminal
 }
 
+user_theme_extension_enabled() {
+  local enabled_list
+  enabled_list="$(gsettings get org.gnome.shell enabled-extensions 2>/dev/null || true)"
+  [[ "$enabled_list" == *"'$USER_THEME_EXTENSION_UUID'"* ]]
+}
+
+enable_user_theme_extension() {
+  local initial_state
+  initial_state="$(gsettings get org.gnome.shell disable-user-extensions 2>/dev/null || true)"
+  if [[ "$initial_state" == "true" ]]; then
+    set_required_gsettings_key "org.gnome.shell" disable-user-extensions "false"
+  fi
+
+  if ! user_theme_extension_enabled; then
+    "$GNOME_EXTENSIONS_BIN" enable "$USER_THEME_EXTENSION_UUID" \
+      || die "Unable to enable the user-theme GNOME Shell extension for --disable-gnome-clickable."
+  fi
+
+  user_theme_extension_enabled \
+    || die "The user-theme extension was not enabled after 'gnome-extensions enable'. Log out and back in, then rerun setup."
+}
+
+install_user_theme_files() {
+  KIOSK_USER_THEME_DIR="$KIOSK_HOME/$USER_THEME_DIR_NAME/$USER_THEME_NAME"
+  KIOSK_USER_THEME_CSS="$KIOSK_USER_THEME_DIR/$USER_THEME_GNOME_SHELL_SUBDIR/$USER_THEME_CSS_NAME"
+
+  mkdir -p "$KIOSK_USER_THEME_DIR/$USER_THEME_GNOME_SHELL_SUBDIR"
+
+  cat >"$KIOSK_USER_THEME_CSS" <<'EOF'
+/* CTRL+ESC+HOST kiosk theme: hide the clickable Activities button. */
+#panel .panel-button#panelActivities,
+#panel .panel-button#panelActivities StBoxLayout,
+#panel .panel-button#panelActivities .workspace-dot {
+  opacity: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  -st-pointer-events: none !important;
+}
+EOF
+  chmod 644 "$KIOSK_USER_THEME_CSS"
+  log "Installed the kiosk GNOME Shell theme at $KIOSK_USER_THEME_DIR"
+}
+
+install_settings_desktop_mask() {
+  local applications_dir="${SETTINGS_DESKTOP_MASK%/*}"
+  local temporary
+
+  [[ -n "$SETTINGS_DESKTOP_MASK" ]] || die "The Settings desktop-mask path was not initialized."
+  mkdir -p "$applications_dir"
+  if [[ -e "$SETTINGS_DESKTOP_MASK" || -L "$SETTINGS_DESKTOP_MASK" ]]; then
+    [[ -f "$SETTINGS_DESKTOP_MASK" && ! -L "$SETTINGS_DESKTOP_MASK" ]] \
+      || die "$SETTINGS_DESKTOP_MASK exists but is not a regular file."
+    grep -Fxq "$SETTINGS_DESKTOP_MASK_MARKER" "$SETTINGS_DESKTOP_MASK" \
+      || die "$SETTINGS_DESKTOP_MASK already exists and is not managed by the kiosk installer."
+  fi
+
+  temporary="$(/usr/bin/mktemp "$applications_dir/.gnome-settings-mask.XXXXXX")"
+  cat >"$temporary" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Settings
+Hidden=true
+NoDisplay=true
+$SETTINGS_DESKTOP_MASK_MARKER
+EOF
+  chmod 644 "$temporary"
+  mv -f -- "$temporary" "$SETTINGS_DESKTOP_MASK"
+  if command -v update-desktop-database &>/dev/null; then
+    update-desktop-database "$applications_dir" || warn "Unable to refresh the user desktop-file cache."
+  fi
+  log "Masked GNOME Settings from Shell application discovery: $SETTINGS_DESKTOP_MASK"
+}
+
+remove_settings_desktop_mask() {
+  [[ -n "$SETTINGS_DESKTOP_MASK" ]] || die "The Settings desktop-mask path was not initialized."
+  [[ -e "$SETTINGS_DESKTOP_MASK" || -L "$SETTINGS_DESKTOP_MASK" ]] || return 0
+  [[ -f "$SETTINGS_DESKTOP_MASK" && ! -L "$SETTINGS_DESKTOP_MASK" ]] \
+    || die "$SETTINGS_DESKTOP_MASK exists but is not a regular file."
+  grep -Fxq "$SETTINGS_DESKTOP_MASK_MARKER" "$SETTINGS_DESKTOP_MASK" \
+    || die "$SETTINGS_DESKTOP_MASK exists and is not managed by the kiosk installer."
+  rm -f -- "$SETTINGS_DESKTOP_MASK"
+  if command -v update-desktop-database &>/dev/null; then
+    update-desktop-database "${SETTINGS_DESKTOP_MASK%/*}" || warn "Unable to refresh the user desktop-file cache."
+  fi
+  log "Removed the managed GNOME Settings desktop mask."
+}
+
+remove_user_theme_files() {
+  KIOSK_USER_THEME_DIR="$KIOSK_HOME/$USER_THEME_DIR_NAME/$USER_THEME_NAME"
+  if [[ -d "$KIOSK_USER_THEME_DIR" ]]; then
+    rm -rf -- "$KIOSK_USER_THEME_DIR"
+    log "Removed the kiosk GNOME Shell theme at $KIOSK_USER_THEME_DIR"
+  fi
+  KIOSK_USER_THEME_DIR=""
+  KIOSK_USER_THEME_CSS=""
+}
+
+configure_gnome_clickable_lockdown() {
+  if [[ "$DISABLE_GNOME_CLICKABLE" == "true" ]]; then
+    log "Hiding the clickable Activities button (--disable-gnome-clickable)..."
+    gsettings_schema_exists "$THEME_BASE_SCHEMA" \
+      || die "The $THEME_BASE_SCHEMA schema is unavailable. Install $USER_THEME_EXTENSION_PACKAGE and re-run setup."
+    enable_user_theme_extension
+    install_user_theme_files
+    install_settings_desktop_mask
+    set_required_gsettings_key "$THEME_BASE_SCHEMA" "$THEME_BASE_KEY" "'$USER_THEME_NAME'"
+    log "Activities button and Quick Settings gear hidden. The change applies on the next GNOME Shell restart or login."
+  elif [[ "$GNOME_CLICKABLE_OVERRIDE_SEEN" == "true" ]]; then
+    log "Re-enabling the clickable Activities button (--no-disable-gnome-clickable)..."
+    if gsettings_schema_exists "$THEME_BASE_SCHEMA"; then
+      reset_gsettings_key "$THEME_BASE_SCHEMA" "$THEME_BASE_KEY" || true
+    fi
+    if user_theme_extension_enabled; then
+      "$GNOME_EXTENSIONS_BIN" disable "$USER_THEME_EXTENSION_UUID" 2>/dev/null || true
+    fi
+    remove_user_theme_files
+    remove_settings_desktop_mask
+    log "Activities button and Quick Settings gear restored. The change applies on the next GNOME Shell restart or login."
+  fi
+}
+
 apply_lockdown() {
   capture_custom_bindings_once
   apply_level_one_lockdown
   if [[ "$LOCKDOWN_LEVEL" == "2" ]]; then
     apply_level_two_lockdown
   fi
+  configure_gnome_clickable_lockdown
   apply_managed_custom_bindings
   log "Instructor recovery terminal: Ctrl+Alt+Shift+O"
 }
@@ -1357,6 +1544,7 @@ run_setup() {
   backup_autostart_once
   capture_custom_bindings_once
   install_dependencies
+  ensure_user_theme_extension
   resolve_browser
   resolve_firefox_profile
   install_kiosk_command
@@ -1376,6 +1564,9 @@ run_setup() {
   log "Kiosk setup completed successfully."
   log "Lockdown level: $LOCKDOWN_LEVEL"
   log "Browser: $BROWSER_NAME"
+  if [[ "$DISABLE_GNOME_CLICKABLE" == "true" ]]; then
+    log "Activities button and Settings gear: hidden (--disable-gnome-clickable)"
+  fi
   log "Recovery: Ctrl+Alt+Shift+O, then run 'kiosk reset'"
   maybe_reboot
 }
@@ -1388,6 +1579,7 @@ run_reset() {
   set_user_paths
   locate_source_html
   install_dependencies
+  ensure_user_theme_extension
   resolve_browser
   resolve_firefox_profile
   install_kiosk_command
@@ -1401,10 +1593,19 @@ run_reset() {
   configure_gdm_autologin
   apply_lockdown
   activate_autostart_stage
+  if [[ "$GNOME_CLICKABLE_OVERRIDE_SEEN" == "true" ]]; then
+    save_configuration
+    log "Saved updated --disable-gnome-clickable state."
+  fi
 
   log ""
   log "Kiosk reset completed successfully."
   log "The original autostart baseline and managed kiosk launcher are restored."
+  if [[ "$DISABLE_GNOME_CLICKABLE" == "true" ]]; then
+    log "Activities button and Settings gear: hidden (--disable-gnome-clickable)"
+  elif [[ "$GNOME_CLICKABLE_OVERRIDE_SEEN" == "true" ]]; then
+    log "Activities button and Settings gear: visible (--no-disable-gnome-clickable)"
+  fi
   log "Recovery: Ctrl+Alt+Shift+O, then run 'kiosk reset'"
   maybe_reboot
 }
