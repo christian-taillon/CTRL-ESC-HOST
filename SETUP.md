@@ -90,7 +90,7 @@ Confirm the JSON retains any preexisting shortcut customizations and also contai
 
 ## Stage 4 — mailto escape (the actual workshop exercise)
 
-Follow `Protocol-Handler-Escape/README.md`: 6-digit ID → Assistance → Digital Support → Contact Support → Email link. Confirm Thunderbird launches (Firefox must delegate `mailto:` to the OS handler the script verified). Then:
+Follow `Protocol-Handler-Escape/README.md`: 6-digit ID → Assistance → Digital Support → Contact Support → Email link. Confirm Thunderbird launches (Firefox must delegate `mailto:` to the OS handler the script requested; its post-set `xdg-mime` check is best-effort). Then:
 
 Thunderbird → Troubleshooting → Open Directory → Nautilus → right-click → Open in Terminal.
 

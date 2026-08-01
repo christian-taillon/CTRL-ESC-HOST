@@ -53,7 +53,7 @@ To also hide the clickable Activities button and the GNOME Settings gear in Quic
 ./prepare-kiosk.sh --level 2 --browser firefox --user kiosk --disable-gnome-clickable --reboot
 ```
 
-The flag is optional and off by default while the approach is validated across the workshop images. When set, the installer installs and enables the `user-theme` GNOME Shell extension (`gnome-shell-extension-user-theme`) and drops a small user theme under `~/.themes/ctrl-esc-host-kiosk/gnome-shell/gnome-shell.css` that hides the `#panelActivities` button. It also creates a managed user-level `org.gnome.Settings.desktop` override with `Hidden=true`; GNOME Shell then omits the Settings gear and Settings application-search entry. This does not uninstall or prevent direct execution of `gnome-control-center`. The changes take effect on the next GNOME Shell restart or login.
+The flag is optional and off by default while the approach is validated across the workshop images. When set, the installer installs and enables the `user-theme` GNOME Shell extension (`gnome-shell-extension-user-theme`) and drops a small user theme under `~/.themes/ctrl-esc-host-kiosk/gnome-shell/gnome-shell.css` that hides the `#panelActivities` button. It also creates a managed user-level `org.gnome.Settings.desktop` override with `Hidden=true`; GNOME Shell then omits the Settings gear and Settings application-search entry. This does not uninstall or prevent direct execution of `gnome-control-center`. A running GNOME Shell may not discover a newly installed system extension immediately, so the installer records its enabled state for the next session instead of requiring live discovery. The changes take effect on the next GNOME Shell restart or login.
 
 `kiosk reset` reuses the saved `--disable-gnome-clickable` state. To toggle it on an already-configured device without a full re-setup, pass either flag to `kiosk reset`; the new state is persisted and applied:
 
@@ -98,7 +98,7 @@ By default the script uses normal GNOME `gsettings` and custom media-key binding
 
 The Firefox profile shortcut overrides apply at either lockdown level when Firefox is selected. Existing unrelated `customKeys.json` entries are preserved.
 
-The installer installs Thunderbird when it is absent, selects an installed Thunderbird desktop entry as the OS `mailto:` handler, and verifies that association with `xdg-mime`. The selected browser still decides whether to delegate a `mailto:` link to the OS, so verify the email-link workflow in the deployed browser profile.
+The installer installs Thunderbird when it is absent, selects an installed Thunderbird desktop entry as the OS `mailto:` handler, and checks that association with `xdg-mime`. A post-set query mismatch produces a note instead of aborting kiosk deployment. The selected browser still decides whether to delegate a `mailto:` link to the OS, so verify the email-link workflow in the deployed browser profile.
 
 ## Instructor Recovery
 

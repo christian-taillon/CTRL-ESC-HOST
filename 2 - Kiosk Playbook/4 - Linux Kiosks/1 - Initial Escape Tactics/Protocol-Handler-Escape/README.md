@@ -24,7 +24,7 @@ The success of this escape relies on specific behaviors in Linux Desktop Environ
 
 * **Chromium/Chrome:** Typically hands off protocols like `mailto:` directly to the OS default handler without restriction, making it the primary target for this specific demo.
 * **Firefox:** Often defaults to handling `mailto:` internally (opening a web-based composer) or blocking it in Kiosk mode.
-* *Note:* We use Firefox in this demo for its ease of Kiosk configuration. The `prepare-kiosk.sh` script installs Thunderbird when needed and verifies the OS association, but Firefox still decides whether to delegate `mailto:` links to that handler. Validate the deployed Firefox profile before the workshop.
+* *Note:* We use Firefox in this demo for its ease of Kiosk configuration. The `prepare-kiosk.sh` script installs Thunderbird when needed and checks the OS association. A post-set query mismatch is only a setup note because Firefox still decides whether to delegate `mailto:` links to that handler. Validate the deployed Firefox profile before the workshop.
 
 
 

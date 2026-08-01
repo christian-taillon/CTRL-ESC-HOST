@@ -30,6 +30,7 @@ ID_BIN="/usr/bin/id"
 GETENT_BIN="/usr/bin/getent"
 SYSTEMCTL_BIN="/usr/bin/systemctl"
 PYTHON_BIN="/usr/bin/python3"
+DPKG_QUERY_BIN="/usr/bin/dpkg-query"
 
 PROGRAM_NAME="${0##*/}"
 SCRIPT_PATH="${BASH_SOURCE[0]}"
@@ -62,11 +63,11 @@ GNOME_CLICKABLE_OVERRIDE_SEEN="false"
 
 USER_THEME_EXTENSION_UUID="user-theme@gnome-shell-extensions.gcampax.github.com"
 USER_THEME_EXTENSION_PACKAGE="gnome-shell-extension-user-theme"
+USER_THEME_EXTENSION_DIR="/usr/share/gnome-shell/extensions/$USER_THEME_EXTENSION_UUID"
 USER_THEME_NAME="ctrl-esc-host-kiosk"
 USER_THEME_DIR_NAME=".themes"
 USER_THEME_GNOME_SHELL_SUBDIR="gnome-shell"
 USER_THEME_CSS_NAME="gnome-shell.css"
-GNOME_EXTENSIONS_BIN="/usr/bin/gnome-extensions"
 THEME_BASE_SCHEMA="org.gnome.shell.extensions.user-theme"
 THEME_BASE_KEY="name"
 KIOSK_USER_THEME_DIR=""
@@ -456,15 +457,21 @@ install_dependencies() {
 ensure_user_theme_extension() {
   [[ "$DISABLE_GNOME_CLICKABLE" == "true" ]] || return 0
 
-  command -v "$GNOME_EXTENSIONS_BIN" &>/dev/null || die "$GNOME_EXTENSIONS_BIN is required for --disable-gnome-clickable (install the gnome-shell package)."
+  [[ -x "$DPKG_QUERY_BIN" ]] || die "$DPKG_QUERY_BIN is required to verify $USER_THEME_EXTENSION_PACKAGE."
 
-  if ! "$GNOME_EXTENSIONS_BIN" list --system 2>/dev/null | grep -Fxq "$USER_THEME_EXTENSION_UUID"; then
+  if ! "$DPKG_QUERY_BIN" --show --showformat='${Status}\n' "$USER_THEME_EXTENSION_PACKAGE" 2>/dev/null \
+    | grep -Fxq "install ok installed"; then
     log "Installing the user-theme GNOME Shell extension package for --disable-gnome-clickable..."
     run_root apt-get install -y "$USER_THEME_EXTENSION_PACKAGE"
   fi
 
-  "$GNOME_EXTENSIONS_BIN" list --system 2>/dev/null | grep -Fxq "$USER_THEME_EXTENSION_UUID" \
-    || die "The user-theme GNOME Shell extension is unavailable after installing $USER_THEME_EXTENSION_PACKAGE."
+  "$DPKG_QUERY_BIN" --show --showformat='${Status}\n' "$USER_THEME_EXTENSION_PACKAGE" 2>/dev/null \
+    | grep -Fxq "install ok installed" \
+    || die "$USER_THEME_EXTENSION_PACKAGE is not installed after apt-get completed."
+  [[ -r "$USER_THEME_EXTENSION_DIR/metadata.json" && -r "$USER_THEME_EXTENSION_DIR/extension.js" ]] \
+    || die "$USER_THEME_EXTENSION_PACKAGE is installed but its extension files are unavailable at $USER_THEME_EXTENSION_DIR."
+  gsettings_schema_exists "$THEME_BASE_SCHEMA" \
+    || die "$USER_THEME_EXTENSION_PACKAGE is installed but the $THEME_BASE_SCHEMA schema is unavailable."
 }
 
 resolve_browser() {
@@ -929,8 +936,11 @@ configure_mail_handler() {
     log "Configured Thunderbird as the default mailto handler."
   fi
   current_handler="$(xdg-mime query default x-scheme-handler/mailto 2>/dev/null || true)"
-  [[ "$current_handler" == "$desktop_id" ]] || die "Unable to verify Thunderbird as the mailto handler."
-  log "Thunderbird is the default mailto handler."
+  if [[ "$current_handler" == "$desktop_id" ]]; then
+    log "Thunderbird is the default mailto handler."
+  else
+    log "Note: Unable to verify the requested mailto handler '$desktop_id' (xdg-mime reported '${current_handler:-none}'). Continuing setup; validate the kiosk Email link before the workshop."
+  fi
 }
 
 verify_active_gdm() {
@@ -1213,6 +1223,27 @@ append_gvariant_array_value() {
   fi
 }
 
+remove_gvariant_array_value() {
+  local current_array="$1"
+  local old_value="$2"
+  local remaining
+  local value_pattern="'([^']*)'"
+  local value
+  local updated_array="[]"
+
+  [[ "$current_array" != "@as []" ]] || current_array="[]"
+  remaining="$current_array"
+  while [[ "$remaining" =~ $value_pattern ]]; do
+    value="${BASH_REMATCH[1]}"
+    remaining="${remaining#*"${BASH_REMATCH[0]}"}"
+    if [[ "$value" != "$old_value" ]]; then
+      append_gvariant_array_value "$updated_array" "$value"
+      updated_array="$REPLY"
+    fi
+  done
+  REPLY="$updated_array"
+}
+
 managed_binding_schema() {
   printf '%s.custom-keybinding:%s\n' "$CUSTOM_BINDING_SCHEMA" "$1"
 }
@@ -1367,20 +1398,57 @@ user_theme_extension_enabled() {
   [[ "$enabled_list" == *"'$USER_THEME_EXTENSION_UUID'"* ]]
 }
 
+user_theme_extension_disabled() {
+  local disabled_list
+  disabled_list="$(gsettings get org.gnome.shell disabled-extensions 2>/dev/null || true)"
+  [[ "$disabled_list" == *"'$USER_THEME_EXTENSION_UUID'"* ]]
+}
+
 enable_user_theme_extension() {
+  local enabled_list
+  local disabled_list
   local initial_state
   initial_state="$(gsettings get org.gnome.shell disable-user-extensions 2>/dev/null || true)"
   if [[ "$initial_state" == "true" ]]; then
     set_required_gsettings_key "org.gnome.shell" disable-user-extensions "false"
   fi
 
-  if ! user_theme_extension_enabled; then
-    "$GNOME_EXTENSIONS_BIN" enable "$USER_THEME_EXTENSION_UUID" \
-      || die "Unable to enable the user-theme GNOME Shell extension for --disable-gnome-clickable."
-  fi
+  enabled_list="$(gsettings get org.gnome.shell enabled-extensions 2>/dev/null)" \
+    || die "Unable to read GNOME's enabled extension list."
+  disabled_list="$(gsettings get org.gnome.shell disabled-extensions 2>/dev/null)" \
+    || die "Unable to read GNOME's disabled extension list."
 
-  user_theme_extension_enabled \
-    || die "The user-theme extension was not enabled after 'gnome-extensions enable'. Log out and back in, then rerun setup."
+  append_gvariant_array_value "$enabled_list" "$USER_THEME_EXTENSION_UUID"
+  enabled_list="$REPLY"
+  set_required_gsettings_key "org.gnome.shell" enabled-extensions "$enabled_list"
+
+  remove_gvariant_array_value "$disabled_list" "$USER_THEME_EXTENSION_UUID"
+  disabled_list="$REPLY"
+  set_required_gsettings_key "org.gnome.shell" disabled-extensions "$disabled_list"
+
+  user_theme_extension_enabled && ! user_theme_extension_disabled \
+    || die "Unable to persist the enabled state for the user-theme GNOME Shell extension."
+}
+
+disable_user_theme_extension() {
+  local enabled_list
+  local disabled_list
+
+  enabled_list="$(gsettings get org.gnome.shell enabled-extensions 2>/dev/null)" \
+    || die "Unable to read GNOME's enabled extension list."
+  disabled_list="$(gsettings get org.gnome.shell disabled-extensions 2>/dev/null)" \
+    || die "Unable to read GNOME's disabled extension list."
+
+  remove_gvariant_array_value "$enabled_list" "$USER_THEME_EXTENSION_UUID"
+  enabled_list="$REPLY"
+  set_required_gsettings_key "org.gnome.shell" enabled-extensions "$enabled_list"
+
+  append_gvariant_array_value "$disabled_list" "$USER_THEME_EXTENSION_UUID"
+  disabled_list="$REPLY"
+  set_required_gsettings_key "org.gnome.shell" disabled-extensions "$disabled_list"
+
+  ! user_theme_extension_enabled && user_theme_extension_disabled \
+    || die "Unable to persist the disabled state for the user-theme GNOME Shell extension."
 }
 
 install_user_theme_files() {
@@ -1478,8 +1546,8 @@ configure_gnome_clickable_lockdown() {
     if gsettings_schema_exists "$THEME_BASE_SCHEMA"; then
       reset_gsettings_key "$THEME_BASE_SCHEMA" "$THEME_BASE_KEY" || true
     fi
-    if user_theme_extension_enabled; then
-      "$GNOME_EXTENSIONS_BIN" disable "$USER_THEME_EXTENSION_UUID" 2>/dev/null || true
+    if user_theme_extension_enabled || user_theme_extension_disabled; then
+      disable_user_theme_extension
     fi
     remove_user_theme_files
     remove_settings_desktop_mask
