@@ -12,7 +12,7 @@ Plug in the device and turn it on. No setup is needed.
 
 If the kiosk does not appear, wait briefly, then use the recovery steps below.
 
-For Firefox 147 or newer, manually verify that `Ctrl+W`, `Ctrl+Shift+W`, and `Ctrl+Q` do nothing. Then confirm that available controls or links can still open and use multiple tabs and popup windows, and that the kiosk Email link still launches the configured Thunderbird application. On touch screens, confirm that pressing and holding a file or folder item in Nautilus opens its context menu.
+For Firefox 147 or newer, manually verify that `Ctrl+W`, `Ctrl+Shift+W`, and `Ctrl+Q` do nothing. Then confirm that available controls or links can still open and use multiple tabs and popup windows, and that the kiosk Email link still launches the configured Thunderbird application. On touch screens, press and hold a folder in Nautilus and confirm that **Open → Open in Console** launches GNOME Console.
 
 ## Reset Between Students
 

@@ -119,9 +119,9 @@ By default the script uses normal GNOME `gsettings` and custom media-key binding
 
 The Firefox profile shortcut overrides apply at either lockdown level when Firefox is selected. Existing unrelated `customKeys.json` entries are preserved.
 
-The installer refreshes APT metadata when dependencies are missing and installs Thunderbird and `curl` when absent. It selects an installed Thunderbird desktop entry as the OS `mailto:` handler and checks that association with `xdg-mime`. A post-set query mismatch produces a note instead of aborting kiosk deployment. The selected browser still decides whether to delegate a `mailto:` link to the OS, so verify the email-link workflow in the deployed browser profile.
+The installer refreshes APT metadata when dependencies are missing and installs Thunderbird, `curl`, GNOME Terminal, and GNOME Console when absent. It selects an installed Thunderbird desktop entry as the OS `mailto:` handler and checks that association with `xdg-mime`. A post-set query mismatch produces a note instead of aborting kiosk deployment. The selected browser still decides whether to delegate a `mailto:` link to the OS, so verify the email-link workflow in the deployed browser profile.
 
-Ubuntu Resolute does not provide the retired `mousetweaks` package. Nautilus 50 handles touch context menus natively on file and folder items: press and hold an item until its context menu opens. Blank whitespace does not provide the same native long-press gesture.
+Ubuntu Resolute does not provide the retired `mousetweaks` package. Nautilus 50 handles touch context menus natively on file and folder items. Press and hold a folder, select **Open**, then select **Open in Console**. Nautilus requires the `gnome-console` package for that action, so the installer ensures it is present. Blank whitespace does not provide the same native long-press gesture.
 
 ## Instructor Recovery
 

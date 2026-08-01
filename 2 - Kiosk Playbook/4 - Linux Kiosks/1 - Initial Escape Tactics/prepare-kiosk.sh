@@ -474,6 +474,7 @@ install_dependencies() {
   command -v curl &>/dev/null || packages+=(curl)
   command -v xdg-mime &>/dev/null || packages+=(xdg-utils)
   command -v gnome-terminal &>/dev/null || packages+=(gnome-terminal)
+  command -v kgx &>/dev/null || packages+=(gnome-console)
 
   case "$BROWSER_NAME" in
   firefox)
