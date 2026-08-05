@@ -44,6 +44,8 @@ Even if the browser is sandboxed (Snap/Flatpak), a permitted external-protocol h
 
 The setup script installs the kiosk runtime, configures automatic login, captures the original autostart baseline, and applies the selected GNOME lockdown level.
 
+> First-time setup reconfigures GDM, GNOME, browser/mail defaults, and autostart, disables GUI navigation shortcuts, and reboots the device into a locked-down kiosk. Run it only on a dedicated kiosk device or VM — not your primary OS. The script prints a warning and requires you to type `approve` at a real terminal before any system changes are made.
+
 ```bash
 chmod +x ../prepare-kiosk.sh
 ../prepare-kiosk.sh --level 2

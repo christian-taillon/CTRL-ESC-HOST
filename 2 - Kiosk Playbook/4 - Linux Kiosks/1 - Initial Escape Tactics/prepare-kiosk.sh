@@ -186,6 +186,11 @@ Lockdown levels:
 The instructor recovery shortcut is Ctrl+Alt+Shift+O. It opens a terminal so
 the instructor can run: kiosk reset
 
+First-time setup requires interactive consent: the script prints a warning
+and asks the operator to type 'approve' at a real terminal before any system
+changes are made. It refuses to run non-interactively. kiosk reset and
+kiosk remove do not require this prompt.
+
 kiosk remove clears the saved kiosk configuration and the managed autostart
 entry so the device can be redeployed with a different app or browser via
 first-time setup. GDM autologin and GNOME lockdown remain until the next setup
@@ -1710,7 +1715,54 @@ maybe_reboot() {
   esac
 }
 
+confirm_setup_consent() {
+  local answer
+
+  log ""
+  log "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+  log "!!!                                                                    !!!"
+  log "!!!   WARNING: THIS SCRIPT RECONFIGURES THE OPERATING SYSTEM.        !!!"
+  log "!!!                                                                    !!!"
+  log "!!!   It prepares this machine to run as a locked-down kiosk and      !!!"
+  log "!!!   changes a LOT of system settings. Although it captures and can  !!!"
+  log "!!!   restore the original configuration, the changes include:        !!!"
+  log "!!!                                                                    !!!"
+  log "!!!     - GDM automatic login for the kiosk user                       !!!"
+  log "!!!     - GNOME keyboard shortcuts, hot corners, and Activities       !!!"
+  log "!!!     - Browser and mail-client defaults (incl. Thunderbird)        !!!"
+  log "!!!     - Screen blanking, suspend, and lock screen                   !!!"
+  log "!!!     - Files installed under /usr/local and autostart entries     !!!"
+  log "!!!                                                                    !!!"
+  log "!!!   Several GUI navigation paths are DISABLED on purpose to prevent  !!!"
+  log "!!!   OS navigation. The device will REBOOT and lock into the kiosk   !!!"
+  log "!!!   app full screen.                                                 !!!"
+  log "!!!                                                                    !!!"
+  log "!!!   Run this ONLY on a dedicated kiosk device or a VM. DO NOT run    !!!"
+  log "!!!   it on your primary OS / daily-driver workstation.               !!!"
+  log "!!!                                                                    !!!"
+  log "!!!   NOTE: 'kiosk remove' clears the saved kiosk config and the      !!!"
+  log "!!!   managed autostart entry, but it does NOT revert GDM autologin   !!!"
+  log "!!!   or GNOME lockdown. Those remain in effect until the next setup  !!!"
+  log "!!!   overwrites them. To fully restore the original OS configuration, !!!"
+  log "!!!   run 'kiosk remove' and then re-run first-time setup to reapply  !!!"
+  log "!!!   the captured baseline, or restore the system from a snapshot.   !!!"
+  log "!!!                                                                    !!!"
+  log "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+  log ""
+
+  if [[ ! -t 0 ]]; then
+    die "No interactive terminal is available. First-time kiosk setup requires explicit typed consent. Re-run from a real TTY and type 'approve' at the prompt."
+  fi
+
+  read -r -p "Type 'approve' to proceed with kiosk setup and reconfigure this system: " answer \
+    || die "Setup cancelled (no input received)."
+
+  [[ "$answer" == "approve" ]] \
+    || die "Setup cancelled. You must type 'approve' exactly to proceed. No system changes were made."
+}
+
 run_setup() {
+  confirm_setup_consent
   set_user_paths
   locate_source_html
   preflight

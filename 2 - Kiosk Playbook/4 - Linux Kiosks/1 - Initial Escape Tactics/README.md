@@ -27,6 +27,8 @@ sudo -v
 
 Firefox deployments require Firefox 147 or newer. Launch the selected system Firefox once and close it before setup so Firefox creates its default profile metadata; the installer will not create or guess a profile.
 
+> **Caution:** First-time setup reconfigures GDM, GNOME, browser/mail defaults, and autostart, disables GUI navigation shortcuts, and reboots the device into a locked-down kiosk. Run it only on a dedicated kiosk device or VM — not your primary OS. The installer requires interactive consent: when run, it prints a warning and prompts you to type `approve` to proceed (no system changes are made until then).
+
 ```bash
 chmod +x prepare-kiosk.sh
 ./prepare-kiosk.sh --level 2

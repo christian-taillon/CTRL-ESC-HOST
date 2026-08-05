@@ -44,6 +44,8 @@ git pull
 
 Omit `--app` to use `airline_kiosk.html`, or select the alternate local app during first-time setup:
 
+> First-time setup requires interactive consent at a real terminal: the script prints a system-reconfiguration warning and asks the operator to type `approve` before making any changes. This protects against accidentally running setup on a primary OS. `kiosk reset` and `kiosk remove` do not require this prompt.
+
 ```bash
 ./prepare-kiosk.sh --reboot --app airport-coffee-kiosk_touchscreen.html
 ```
